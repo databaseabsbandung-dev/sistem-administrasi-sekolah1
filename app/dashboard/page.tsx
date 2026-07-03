@@ -1,5 +1,6 @@
 'use client'
 
+import Sidebar from '@/components/Sidebar'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -233,62 +234,7 @@ export default function DashboardPage() {
     <div className="flex min-h-screen bg-slate-50 text-slate-800 font-opensans">
       
       {/* SIDEBAR NAVIGASI STICKY */}
-      <aside className="w-72 bg-white border-r border-slate-200 flex flex-col justify-between hidden md:flex sticky top-0 h-screen shrink-0">
-        <div className="overflow-y-auto">
-          <div className="h-20 flex flex-col justify-center px-6 border-b border-slate-200 bg-[#F7ECFA]/40">
-             <div className="flex items-center gap-3">
-                {logoUtama ? (
-                  <img src={logoUtama} alt="Logo Utama" className="w-8 h-8 object-contain shrink-0" />
-                ) : (
-                  <Landmark className="w-6 h-6 text-[#6A197D] shrink-0" />
-                )}
-                <h2 className="text-xs font-baloo font-black text-[#22072B] uppercase tracking-widest truncate">{namaInduk}</h2>
-             </div>
-          </div>
-          
-          <nav className="p-4 space-y-1">
-            <Link href="/dashboard" className="flex items-center gap-3 px-4 py-3 text-sm font-baloo font-bold text-white bg-[#6A197D] rounded-xl shadow-md shadow-[#DEB3EA]">
-              <Home className="w-4 h-4" /> Beranda Dasbor
-            </Link>
-            <Link href="/lembaga" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition">
-              <Building className="w-4 h-4" /> Identitas Lembaga
-            </Link>
-            <Link href="/peran" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition">
-              <Shield className="w-4 h-4" /> Pembagian Peran & Guru
-            </Link>
-            
-            <div className="pt-6 pb-2 px-4 text-[10px] font-baloo font-black text-slate-400 uppercase tracking-widest">Modul Administrasi</div>
-            <Link href="/kaldik" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition">
-              <CalendarDays className="w-4 h-4" /> Kalender Pendidikan
-            </Link>
-            <Link href="/jadwal" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition">
-              <Clock className="w-4 h-4" /> Jadwal Pelajaran
-            </Link>
-            <Link href="/minggu-efektif" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition">
-              <BarChart2 className="w-4 h-4" /> Minggu Efektif
-            </Link>
-            <Link href="/cp-tp-atp" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition">
-              <FileText className="w-4 h-4" /> CP, TP & ATP
-            </Link>
-            <Link href="/prota-promes" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition">
-              <FileSpreadsheet className="w-4 h-4" /> Prota & Promes
-            </Link>
-            <Link href="/rpp" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition">
-              <BookOpen className="w-4 h-4" /> RPP / Modul Ajar
-            </Link>
-          </nav>
-        </div>
-        
-        <div className="p-4 border-t border-slate-200 bg-slate-50">
-          <div className="mb-4 px-2">
-            <p className="text-[10px] text-slate-500 font-baloo font-bold uppercase">Tahun Ajaran Aktif</p>
-            <p className="text-sm font-baloo font-black text-[#330B40]">{tahunAjaranAktif}</p>
-          </div>
-          <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-2.5 w-full text-sm font-baloo font-bold text-red-600 bg-white border border-red-100 rounded-xl hover:bg-red-50 transition">
-            <LogOut className="w-4 h-4" /> Keluar Sistem
-          </button>
-        </div>
-      </aside>
+      <Sidebar />
 
       {/* --- MAIN CONTENT --- */}
       <main className="flex-1 p-8 overflow-y-auto max-w-6xl mx-auto space-y-8">

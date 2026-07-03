@@ -74,14 +74,14 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="w-72 bg-white border-r border-slate-200 flex flex-col justify-between hidden md:flex sticky top-0 h-screen shrink-0">
+    <aside className="font-opensans w-72 bg-white border-r border-slate-200 flex flex-col justify-between hidden md:flex sticky top-0 h-screen shrink-0">
       <div className="overflow-y-auto">
-        <div className="h-20 flex flex-col justify-center px-6 border-b border-slate-200 bg-indigo-50/40">
+        <div className="h-20 flex flex-col justify-center px-6 border-b-2 border-[#FFDE59] bg-[#F7ECFA]/40">
           <div className="flex items-center gap-3">
             {logoInduk
               ? <img src={logoInduk} alt="Logo" className="w-8 h-8 object-contain shrink-0" />
-              : <Landmark className="w-6 h-6 text-indigo-600 shrink-0" />}
-            <h2 className="text-xs font-black text-indigo-950 uppercase tracking-widest truncate">{namaInduk}</h2>
+              : <Landmark className="w-6 h-6 text-[#6A197D] shrink-0" />}
+            <h2 className="font-baloo text-xs font-bold text-[#220729] uppercase tracking-widest truncate">{namaInduk}</h2>
           </div>
         </div>
 
@@ -95,16 +95,16 @@ export default function Sidebar() {
             return (
               <div key={item.href}>
                 {item.sectionBefore && (
-                  <div className="pt-6 pb-2 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  <div className="font-baloo pt-6 pb-2 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                     {item.sectionBefore}
                   </div>
                 )}
                 <a
                   href={item.href}
-                  className={`flex items-center gap-3 px-4 py-3 text-sm rounded-xl transition ${
+                  className={`font-opensans flex items-center gap-3 px-4 py-3 text-sm rounded-xl transition ${
                     aktif
-                      ? 'font-bold text-white bg-indigo-600 shadow-md shadow-indigo-200'
-                      : 'font-medium text-slate-600 hover:bg-slate-100'
+                      ? 'font-bold text-white bg-[#6A197D] shadow-md shadow-[#E3C2ED]'
+                      : 'font-medium text-slate-600 hover:bg-[#F7ECFA]'
                   }`}
                 >
                   <Icon className="w-4 h-4" /> {item.label}
@@ -123,7 +123,7 @@ export default function Sidebar() {
         )}
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 px-4 py-2.5 w-full text-sm font-bold text-red-600 bg-white border border-red-100 rounded-xl hover:bg-red-50 transition"
+          className="font-opensans flex items-center gap-3 px-4 py-2.5 w-full text-sm font-bold text-red-600 bg-white border border-red-100 rounded-xl hover:bg-red-50 transition"
         >
           <LogOut className="w-4 h-4" /> Keluar Sistem
         </button>

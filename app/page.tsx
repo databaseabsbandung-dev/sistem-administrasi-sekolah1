@@ -90,7 +90,7 @@ export default function LoginPage() {
     <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-slate-100">
       <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-2xl shadow-xl border border-slate-200">
         <div className="text-center space-y-2">
-           <Landmark className="w-10 h-10 mx-auto text-indigo-600" />
+           <Landmark className="w-10 h-10 mx-auto text-[#6A197D]" />
            <h1 className="text-xl font-black text-gray-900 tracking-wide">
              Sistem Administrasi Sekolah
            </h1>
@@ -106,7 +106,7 @@ export default function LoginPage() {
                  type="text" 
                  value={identity}
                  onChange={(e) => setIdentity(e.target.value)}
-                 className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-700" 
+                 className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#8A2FA0] font-semibold text-slate-700" 
                  placeholder="admin@sekolah.sch.id ATAU nurulfitri" 
                  required
                />
@@ -124,7 +124,7 @@ export default function LoginPage() {
                  type="password" 
                  value={password}
                  onChange={(e) => setPassword(e.target.value)}
-                 className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-700" 
+                 className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#8A2FA0] font-semibold text-slate-700" 
                  placeholder="Kata sandi / NPSN sekolah"
                  required
                />
@@ -140,7 +140,7 @@ export default function LoginPage() {
           <button 
             type="submit" 
             disabled={loading}
-            className="w-full px-4 py-3.5 text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 font-black shadow-md transition flex items-center justify-center gap-2"
+            className="w-full px-4 py-3.5 text-white bg-[#6A197D] rounded-xl hover:bg-[#571466] focus:outline-none focus:ring-2 focus:ring-[#8A2FA0] focus:ring-offset-2 font-black shadow-md transition flex items-center justify-center gap-2"
           >
             {loading ? 'Memvalidasi Akses...' : 'Masuk Sistem'} <ArrowRight className="w-4 h-4" />
           </button>

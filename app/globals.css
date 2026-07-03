@@ -3,24 +3,50 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Warna identitas sekolah */
+  --color-ungu: #6A197D;
+  --color-kuning: #FFDE59;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+
+  /* Font default seluruh halaman = Open Sans */
+  --font-sans: var(--font-opensans);
+  --font-mono: var(--font-opensans);
+
+  /* Class utilitas eksplisit: font-baloo (judul/tebal) & font-opensans (isi) */
+  --font-baloo: var(--font-baloo);
+  --font-opensans: var(--font-opensans);
+
+  /* Class utilitas warna identitas: bg-ungu, text-ungu, border-ungu, dst */
+  --color-ungu: #6A197D;
+  --color-kuning: #FFDE59;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #ffffff;
+    --foreground: #171717;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-opensans), Arial, Helvetica, sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-baloo), Arial, Helvetica, sans-serif;
+}
+
+/* Hasil cetak (Ctrl/Cmd+P) & unduhan yang dirender lewat browser (mis. window.print())
+   WAJIB memakai Times New Roman sesuai identitas dokumen resmi sekolah. */
+@media print {
+  * {
+    font-family: "Times New Roman", Times, serif !important;
+  }
 }

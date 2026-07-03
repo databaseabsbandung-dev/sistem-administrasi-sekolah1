@@ -1,5 +1,7 @@
 'use client'
+import { useAksesGuard } from '@/lib/useAksesGuard'
 
+import Sidebar from '@/components/Sidebar'
 import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../supabase'
@@ -155,6 +157,7 @@ function hitungKolomKelas(fase: string, kelasUrut: string[]): string[] {
 export default function CpTpAtpPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
+  const diizinkanAkses = useAksesGuard('cp_tp_atp')
   const [namaInduk, setNamaInduk] = useState('Lembaga / Yayasan Pusat')
   const [logoInduk, setLogoInduk] = useState('')
   const [namaSekolah, setNamaSekolah] = useState('')
@@ -569,14 +572,14 @@ export default function CpTpAtpPage() {
       const contentWidth = pageWidth - marginLeft - marginRight
       let y = 18
 
-      doc.setFont('helvetica', 'bold')
+      doc.setFont('times', 'bold')
       doc.setFontSize(13)
       doc.text('ALUR TUJUAN PEMBELAJARAN', pageWidth / 2, y, { align: 'center' })
       y += 6
       doc.text((namaSekolah || namaInduk || '').toUpperCase(), pageWidth / 2, y, { align: 'center' })
       y += 9
 
-      doc.setFont('helvetica', 'normal')
+      doc.setFont('times', 'normal')
       doc.setFontSize(10.5)
       const halfW = contentWidth / 2
       doc.text(`Fase : FASE ${filterFase}`, marginLeft, y)
@@ -765,7 +768,8 @@ export default function CpTpAtpPage() {
 
   const namaMateri = (materiId?: string) => daftarMateri.find(m => m.id === materiId)?.nama || ''
 
-  if (loading) return <div className="p-8 text-center font-semibold text-indigo-600">Memuat Modul CP / TP / ATP...</div>
+  if (loading || diizinkanAkses === null) return <div className="p-8 text-center font-semibold text-[#6A197D]">Memuat Modul CP / TP / ATP...</div>
+  if (diizinkanAkses === false) return null
 
   // ─────────────────────────────────────────────────────────
   // RENDER
@@ -774,35 +778,7 @@ export default function CpTpAtpPage() {
     <div className="flex min-h-screen bg-slate-50 text-slate-800">
 
       {/* SIDEBAR */}
-      <aside className="w-72 bg-white border-r border-slate-200 flex flex-col justify-between hidden md:flex sticky top-0 h-screen shrink-0">
-        <div className="overflow-y-auto">
-          <div className="h-20 flex flex-col justify-center px-6 border-b border-slate-200 bg-indigo-50/40">
-            <div className="flex items-center gap-3">
-              {logoInduk ? <img src={logoInduk} alt="Logo" className="w-8 h-8 object-contain shrink-0" />
-                : <Landmark className="w-6 h-6 text-indigo-600 shrink-0" />}
-              <h2 className="text-xs font-black text-indigo-950 uppercase tracking-widest truncate">{namaInduk}</h2>
-            </div>
-          </div>
-          <nav className="p-4 space-y-1">
-            <a href="/dashboard" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><Home className="w-4 h-4" /> Beranda Dasbor</a>
-            <a href="/lembaga" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><Building className="w-4 h-4" /> Identitas Lembaga</a>
-            <a href="/peran" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><Shield className="w-4 h-4" /> Pembagian Peran & Guru</a>
-            <div className="pt-6 pb-2 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Modul Administrasi</div>
-            <a href="/kaldik" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><CalendarDays className="w-4 h-4" /> Kalender Pendidikan</a>
-            <a href="/jadwal" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><Clock className="w-4 h-4" /> Jadwal Pelajaran</a>
-            <a href="/minggu-efektif" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><BarChart2 className="w-4 h-4" /> Minggu Efektif</a>
-            <a href="/cp-tp-atp" className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-white bg-indigo-600 rounded-xl shadow-md shadow-indigo-200"><FileText className="w-4 h-4" /> CP, TP & ATP</a>
-            <a href="#" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><FileSpreadsheet className="w-4 h-4" /> Prota & Promes</a>
-            <a href="#" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><BookOpen className="w-4 h-4" /> RPP / Modul Ajar</a>
-          </nav>
-        </div>
-        <div className="p-4 border-t border-slate-200 bg-slate-50">
-          <button onClick={() => { supabase.auth.signOut(); router.push('/') }}
-            className="flex items-center gap-3 px-4 py-2.5 w-full text-sm font-bold text-red-600 bg-white border border-red-100 rounded-xl hover:bg-red-50 transition">
-            <LogOut className="w-4 h-4" /> Keluar Sistem
-          </button>
-        </div>
-      </aside>
+      <Sidebar />
 
       {/* MAIN */}
       <main className="flex-1 p-8 overflow-y-auto max-w-7xl mx-auto space-y-8">
@@ -817,7 +793,7 @@ export default function CpTpAtpPage() {
             <div>
               <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1.5 block">Mata Pelajaran</label>
               <select value={filterMapelId} onChange={e => setFilterMapelId(e.target.value)}
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#8A2FA0] bg-white">
                 <option value="">-- Pilih Mapel --</option>
                 {daftarMapel.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}
               </select>
@@ -825,7 +801,7 @@ export default function CpTpAtpPage() {
             <div>
               <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1.5 block">Fase</label>
               <select value={filterFase} onChange={e => setFilterFase(e.target.value)}
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#8A2FA0] bg-white">
                 <option value="">-- Pilih Fase --</option>
                 {FASE_OPTIONS.map(f => <option key={f} value={f}>Fase {f}</option>)}
               </select>
@@ -840,7 +816,7 @@ export default function CpTpAtpPage() {
             <div>
               <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1.5 block">Guru Pengampu</label>
               <select value={filterGuruId} onChange={e => setFilterGuruId(e.target.value)}
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#8A2FA0] bg-white">
                 <option value="">-- Pilih Guru --</option>
                 {daftarGuru.map(g => <option key={g.id} value={g.id}>{g.nama}</option>)}
               </select>
@@ -849,7 +825,7 @@ export default function CpTpAtpPage() {
               <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1.5 block">Tahun Ajaran</label>
               <input value={tahunAjaran} onChange={e => setTahunAjaran(e.target.value)}
                 placeholder="Cth: 2025/2026"
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#8A2FA0]" />
             </div>
           </div>
           <p className="mt-3 text-[10px] text-slate-400 leading-relaxed">
@@ -883,7 +859,7 @@ export default function CpTpAtpPage() {
             { key: 'rekap', label: 'Rekap ATP', icon: <FileText className="w-3.5 h-3.5" /> },
           ].map(t => (
             <button key={t.key} onClick={() => setTabUtama(t.key as any)}
-              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition ${tabUtama === t.key ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-50'}`}>
+              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition ${tabUtama === t.key ? 'bg-[#6A197D] text-white shadow' : 'text-slate-600 hover:bg-slate-50'}`}>
               {t.icon} {t.label}
             </button>
           ))}
@@ -965,7 +941,7 @@ export default function CpTpAtpPage() {
                         </div>
                         <div className="flex gap-1 shrink-0">
                           <button onClick={() => { setFormCpUmum(cu); setEditCpUmumId(cu.id); setShowFormCpUmum(true) }}
-                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"><Edit2 className="w-4 h-4" /></button>
+                            className="p-2 text-slate-400 hover:text-[#6A197D] hover:bg-[#F7ECFA] rounded-lg transition"><Edit2 className="w-4 h-4" /></button>
                           <button onClick={() => handleHapusCpUmum(cu.id)}
                             className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"><Trash2 className="w-4 h-4" /></button>
                         </div>
@@ -984,20 +960,20 @@ export default function CpTpAtpPage() {
                   <p className="text-[10px] text-slate-500 mt-0.5">CP dari pemerintah/pusat, dipecah per elemen. Berlaku untuk satu fase (mis. Fase D = seluruh SMP), bukan per kelas.</p>
                 </div>
                 <button onClick={() => { setShowFormCp(true); setEditCpId(null); setFormCp({ mapelId: filterMapelId, fase: filterFase }) }}
-                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold text-xs shadow transition">
+                  className="flex items-center gap-2 bg-[#6A197D] hover:bg-[#571466] text-white px-4 py-2 rounded-xl font-bold text-xs shadow transition">
                   <Plus className="w-3.5 h-3.5" /> Tambah CP
                 </button>
               </div>
 
               {/* Form CP */}
               {showFormCp && (
-                <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-5 space-y-4">
-                  <h3 className="text-xs font-black text-indigo-800 uppercase tracking-wider">{editCpId ? 'Edit' : 'Tambah'} Capaian Pembelajaran</h3>
+                <div className="bg-[#F7ECFA]/50 border border-[#F0DFF5] rounded-2xl p-5 space-y-4">
+                  <h3 className="text-xs font-black text-[#450F52] uppercase tracking-wider">{editCpId ? 'Edit' : 'Tambah'} Capaian Pembelajaran</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Mata Pelajaran *</label>
                       <select value={formCp.mapelId||''} onChange={e => setFormCp({...formCp, mapelId: e.target.value})}
-                        className="w-full px-3 py-2 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                        className="w-full px-3 py-2 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#8A2FA0] bg-white">
                         <option value="">-- Pilih --</option>
                         {daftarMapel.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}
                       </select>
@@ -1005,7 +981,7 @@ export default function CpTpAtpPage() {
                     <div>
                       <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Fase *</label>
                       <select value={formCp.fase||''} onChange={e => setFormCp({...formCp, fase: e.target.value})}
-                        className="w-full px-3 py-2 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                        className="w-full px-3 py-2 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#8A2FA0] bg-white">
                         <option value="">-- Fase --</option>
                         {FASE_OPTIONS.map(f => <option key={f} value={f}>Fase {f}</option>)}
                       </select>
@@ -1015,20 +991,20 @@ export default function CpTpAtpPage() {
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Elemen CP (Opsional)</label>
                     <input value={formCp.elemen||''} onChange={e => setFormCp({...formCp, elemen: e.target.value})}
                       placeholder="Cth: Pemahaman Konsep, Keterampilan Proses, dll"
-                      className="w-full px-3 py-2 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500" />
+                      className="w-full px-3 py-2 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-[#8A2FA0]" />
                   </div>
                   <div>
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Deskripsi Capaian Pembelajaran *</label>
                     <textarea value={formCp.deskripsi||''} onChange={e => setFormCp({...formCp, deskripsi: e.target.value})}
                       placeholder="Tulis deskripsi CP sesuai dokumen kurikulum..."
                       rows={4}
-                      className="w-full px-3 py-2.5 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+                      className="w-full px-3 py-2.5 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-[#8A2FA0] resize-none" />
                   </div>
                   <div className="flex gap-2 justify-end">
                     <button onClick={() => { setShowFormCp(false); setEditCpId(null); setFormCp({}) }}
                       className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition">Batal</button>
                     <button onClick={handleSimpanCp}
-                      className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition">
+                      className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-[#6A197D] rounded-xl hover:bg-[#571466] transition">
                       <Check className="w-3.5 h-3.5" /> Simpan CP
                     </button>
                   </div>
@@ -1052,7 +1028,7 @@ export default function CpTpAtpPage() {
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 space-y-2">
                           <div className="flex flex-wrap gap-2 items-center">
-                            <span className="px-2.5 py-1 bg-indigo-100 text-indigo-800 text-[10px] font-black rounded-lg uppercase tracking-wider">{namaMapelCp}</span>
+                            <span className="px-2.5 py-1 bg-[#F0DFF5] text-[#450F52] text-[10px] font-black rounded-lg uppercase tracking-wider">{namaMapelCp}</span>
                             <span className="px-2.5 py-1 bg-blue-50 text-blue-700 text-[10px] font-black rounded-lg">Fase {cp.fase}</span>
                             {cp.elemen && <span className="px-2.5 py-1 bg-violet-50 text-violet-700 text-[10px] font-semibold rounded-lg">{cp.elemen}</span>}
                             <span className="px-2.5 py-1 bg-amber-50 text-amber-700 text-[10px] font-bold rounded-lg">{materiCount} Materi</span>
@@ -1062,7 +1038,7 @@ export default function CpTpAtpPage() {
                         </div>
                         <div className="flex gap-1 shrink-0">
                           <button onClick={() => { setFormCp(cp); setEditCpId(cp.id); setShowFormCp(true) }}
-                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"><Edit2 className="w-4 h-4" /></button>
+                            className="p-2 text-slate-400 hover:text-[#6A197D] hover:bg-[#F7ECFA] rounded-lg transition"><Edit2 className="w-4 h-4" /></button>
                           <button onClick={() => handleHapusCp(cp.id)}
                             className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"><Trash2 className="w-4 h-4" /></button>
                         </div>
@@ -1144,7 +1120,7 @@ export default function CpTpAtpPage() {
                         {isExpand ? <ChevronDown className="w-4 h-4 text-amber-500 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
                         <div>
                           <div className="flex gap-2 items-center flex-wrap">
-                            <span className="text-[10px] font-black bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded">{namaMapelCp}</span>
+                            <span className="text-[10px] font-black bg-[#F7ECFA] text-[#571466] px-2 py-0.5 rounded">{namaMapelCp}</span>
                             <span className="text-[10px] font-black bg-slate-100 text-slate-600 px-2 py-0.5 rounded">Fase {cp.fase}</span>
                           </div>
                           <p className="text-xs font-semibold text-slate-700 mt-1 line-clamp-1">{cp.deskripsi}</p>
@@ -1201,7 +1177,7 @@ export default function CpTpAtpPage() {
                 <p className="text-[10px] text-slate-500 mt-0.5">Turunkan setiap CP menjadi TP yang lebih spesifik, dan pilih Materi yang menaunginya.</p>
               </div>
               <button onClick={() => { setShowFormTp(true); setEditTpId(null); setFormTp({ dimensiPancasila: [] }) }}
-                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold text-xs shadow transition">
+                className="flex items-center gap-2 bg-[#6A197D] hover:bg-[#571466] text-white px-4 py-2 rounded-xl font-bold text-xs shadow transition">
                 <Plus className="w-3.5 h-3.5" /> Tambah TP
               </button>
             </div>
@@ -1249,7 +1225,7 @@ export default function CpTpAtpPage() {
                   <div className="flex flex-wrap gap-2">
                     {DIMENSI_PANCASILA.map(d => (
                       <button key={d} onClick={() => toggleDimensi(d)}
-                        className={`px-3 py-1.5 rounded-xl text-[10px] font-bold border transition ${(formTp.dimensiPancasila||[]).includes(d) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}>
+                        className={`px-3 py-1.5 rounded-xl text-[10px] font-bold border transition ${(formTp.dimensiPancasila||[]).includes(d) ? 'bg-[#6A197D] text-white border-[#6A197D]' : 'bg-white text-slate-600 border-slate-200 hover:border-[#D19EE0]'}`}>
                         {d}
                       </button>
                     ))}
@@ -1279,10 +1255,10 @@ export default function CpTpAtpPage() {
                       onClick={() => setExpandCpId(isExpand ? null : cp.id)}
                       className="flex items-center justify-between gap-3 p-4 cursor-pointer hover:bg-slate-50/70 transition">
                       <div className="flex items-center gap-3 flex-1">
-                        {isExpand ? <ChevronDown className="w-4 h-4 text-indigo-500 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
+                        {isExpand ? <ChevronDown className="w-4 h-4 text-[#8A2FA0] shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
                         <div>
                           <div className="flex gap-2 items-center flex-wrap">
-                            <span className="text-[10px] font-black bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded">{namaMapelCp}</span>
+                            <span className="text-[10px] font-black bg-[#F7ECFA] text-[#571466] px-2 py-0.5 rounded">{namaMapelCp}</span>
                             <span className="text-[10px] font-black bg-slate-100 text-slate-600 px-2 py-0.5 rounded">Fase {cp.fase}</span>
                           </div>
                           <p className="text-xs font-semibold text-slate-700 mt-1 line-clamp-1">{cp.deskripsi}</p>
@@ -1380,7 +1356,7 @@ export default function CpTpAtpPage() {
                     {tpBelumDipetakan.map(tp => (
                       <div key={tp.id} draggable
                         onDragStart={e => onDragStartPool(e, tp.id)}
-                        className="bg-white border border-slate-200 rounded-xl p-2.5 shadow-sm cursor-grab active:cursor-grabbing hover:border-indigo-300 transition">
+                        className="bg-white border border-slate-200 rounded-xl p-2.5 shadow-sm cursor-grab active:cursor-grabbing hover:border-[#D19EE0] transition">
                         <div className="flex items-start gap-1.5">
                           <GripVertical className="w-3.5 h-3.5 text-slate-300 mt-0.5 shrink-0" />
                           <div className="flex-1 min-w-0">
@@ -1395,7 +1371,7 @@ export default function CpTpAtpPage() {
                         {kolomKelasAtp.length > 0 && (
                           <select onChange={e => { if (e.target.value) { handlePindahkanTpKeKelas(tp.id, e.target.value); e.target.value = '' } }}
                             defaultValue=""
-                            className="w-full mt-2 px-2 py-1.5 border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50">
+                            className="w-full mt-2 px-2 py-1.5 border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-[#8A2FA0] bg-slate-50">
                             <option value="">→ Pindah ke kelas...</option>
                             {kolomKelasAtp.map(k => <option key={k} value={k}>Kelas {k}</option>)}
                           </select>
@@ -1416,7 +1392,7 @@ export default function CpTpAtpPage() {
                       onDragOver={e => onDragOverColumn(e, kelas)}
                       onDragLeave={onDragLeaveColumn}
                       onDrop={e => onDropColumn(e, kelas)}
-                      className={`w-80 shrink-0 border rounded-2xl p-3 flex flex-col max-h-[75vh] transition ${isDragOver ? 'bg-indigo-50 border-indigo-400 border-2' : 'bg-white border-slate-200'}`}>
+                      className={`w-80 shrink-0 border rounded-2xl p-3 flex flex-col max-h-[75vh] transition ${isDragOver ? 'bg-[#F7ECFA] border-[#B36BC7] border-2' : 'bg-white border-slate-200'}`}>
                       <div className="px-1 pb-2 mb-2 border-b border-slate-200 flex items-center justify-between">
                         <h3 className="text-xs font-black text-slate-800">Kelas {kelas}</h3>
                         <div className="flex items-center gap-1.5">
@@ -1425,7 +1401,7 @@ export default function CpTpAtpPage() {
                               No {nomorAwal}{nomorAkhir !== nomorAwal ? `–${nomorAkhir}` : ''}
                             </span>
                           )}
-                          <span className="text-[10px] font-black bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">{entri.length} TP</span>
+                          <span className="text-[10px] font-black bg-[#F7ECFA] text-[#571466] px-2 py-0.5 rounded-full">{entri.length} TP</span>
                         </div>
                       </div>
                       <div className="space-y-2 overflow-y-auto flex-1 min-h-[80px]">
@@ -1544,7 +1520,7 @@ export default function CpTpAtpPage() {
                               const tp = daftarTp.find(t => t.id === a.tpId)
                               return (
                                 <tr key={a.id} className={`${a.nomorGlobal % 2 === 0 ? 'bg-slate-50/50' : 'bg-white'}`}>
-                                  <td className="p-2 border border-slate-100 text-center font-bold text-indigo-500">{a.nomorGlobal}</td>
+                                  <td className="p-2 border border-slate-100 text-center font-bold text-[#8A2FA0]">{a.nomorGlobal}</td>
                                   {i === 0 && (
                                     <td className="p-2 border border-slate-100 text-center font-black text-slate-700 align-top" rowSpan={b.items.length}>
                                       {b.kelas}

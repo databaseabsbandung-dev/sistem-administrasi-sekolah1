@@ -1,5 +1,7 @@
 'use client'
+import { useAksesGuard } from '@/lib/useAksesGuard'
 
+import Sidebar from '@/components/Sidebar'
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../supabase'
@@ -662,6 +664,7 @@ function generatePrintHtmlGuru(p: {
 export default function JadwalPelajaranPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
+  const diizinkanAkses = useAksesGuard('jadwal')
 
   // --- Identitas (dibaca dari halaman Identitas Lembaga & Dashboard) ---
   const [identitasInduk, setIdentitasInduk] = useState<any>({ nama: 'Lembaga / Yayasan Pusat', npsn: '', logo_utama: '', logo: '', kop: '', alamat: '', logoKiriSumber: 'pusat', logoKananSumber: 'pusat' })
@@ -1889,7 +1892,8 @@ export default function JadwalPelajaranPage() {
   // ============================================================
   // COMPUTED
   // ============================================================
-  if (loading) return <div className="p-8 text-center font-semibold text-indigo-600">Memuat Modul Penjadwalan...</div>
+  if (loading || diizinkanAkses === null) return <div className="p-8 text-center font-semibold text-[#6A197D]">Memuat Modul Penjadwalan...</div>
+  if (diizinkanAkses === false) return null
 
   const slotMapelUrut = daftarWaktu.filter(w => w.jenis === 'mapel').sort((a, b) => Number(a.jamKe) - Number(b.jamKe))
   const allSlotsUrut = [...daftarWaktu].sort((a, b) => Number(a.jamKe || 0) - Number(b.jamKe || 0))
@@ -1932,32 +1936,7 @@ export default function JadwalPelajaranPage() {
     <div className="flex min-h-screen bg-slate-50 text-slate-800">
 
       {/* SIDEBAR */}
-      <aside className="w-72 bg-white border-r border-slate-200 flex flex-col justify-between hidden md:flex sticky top-0 h-screen shrink-0">
-        <div className="overflow-y-auto">
-          <div className="h-20 flex flex-col justify-center px-6 border-b border-slate-200 bg-indigo-50/40">
-            <div className="flex items-center gap-3">
-              {logoInduk ? <img src={logoInduk} alt="Logo" className="w-8 h-8 object-contain shrink-0" /> : <Landmark className="w-6 h-6 text-indigo-600" />}
-              <h2 className="text-xs font-black text-indigo-950 uppercase tracking-widest truncate">{namaInduk}</h2>
-            </div>
-          </div>
-          <nav className="p-4 space-y-1">
-            <a href="/dashboard" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><Home className="w-4 h-4" /> Beranda Dasbor</a>
-            <a href="/lembaga" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><Building className="w-4 h-4" /> Identitas Lembaga</a>
-            <a href="/peran" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><Shield className="w-4 h-4" /> Pembagian Peran & Guru</a>
-            <div className="pt-6 pb-2 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Modul Administrasi</div>
-            <a href="/kaldik" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><CalendarDays className="w-4 h-4" /> Kalender Pendidikan</a>
-            <a href="/jadwal" className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-white bg-indigo-600 rounded-xl shadow-md"><Clock className="w-4 h-4" /> Jadwal Pelajaran</a>
-            <a href="#" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><BarChart2 className="w-4 h-4" /> Minggu Efektif</a>
-            <a href="#" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><FileText className="w-4 h-4" /> CP, TP & ATP</a>
-            <a href="#" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><BookOpen className="w-4 h-4" /> RPP / Modul Ajar</a>
-          </nav>
-        </div>
-        <div className="p-4 border-t border-slate-200 bg-slate-50">
-          <button onClick={() => { supabase.auth.signOut(); router.push('/') }} className="flex items-center gap-3 px-4 py-2.5 w-full text-sm font-bold text-red-600 bg-white border border-red-100 rounded-xl hover:bg-red-50 transition">
-            <LogOut className="w-4 h-4" /> Keluar Sistem
-          </button>
-        </div>
-      </aside>
+      <Sidebar />
 
       {/* MAIN */}
       <main className="flex-1 p-8 overflow-y-auto max-w-screen-2xl mx-auto space-y-8">
@@ -1974,26 +1953,26 @@ export default function JadwalPelajaranPage() {
         </header>
 
         {/* KONTROL */}
-        <section className="bg-indigo-50/50 border border-indigo-100 p-6 rounded-2xl grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+        <section className="bg-[#F7ECFA]/50 border border-[#F0DFF5] p-6 rounded-2xl grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
           <div>
-            <label className="text-[10px] font-extrabold text-indigo-900 uppercase tracking-wider mb-1.5 block">Mode Tampilan</label>
-            <select value={modeTampil} onChange={e => setModeTampil(e.target.value as any)} className="w-full px-4 py-2.5 border border-indigo-200 rounded-xl text-xs bg-white font-bold outline-none focus:ring-2 focus:ring-indigo-500">
+            <label className="text-[10px] font-extrabold text-[#330B40] uppercase tracking-wider mb-1.5 block">Mode Tampilan</label>
+            <select value={modeTampil} onChange={e => setModeTampil(e.target.value as any)} className="w-full px-4 py-2.5 border border-[#E3C2ED] rounded-xl text-xs bg-white font-bold outline-none focus:ring-2 focus:ring-[#8A2FA0]">
               <option value="keseluruhan">Keseluruhan (Semua Unit)</option>
               <option value="unit">Per Unit Lembaga</option>
             </select>
           </div>
           {modeTampil === 'unit' && (
             <div>
-              <label className="text-[10px] font-extrabold text-indigo-900 uppercase tracking-wider mb-1.5 block">Unit Ditampilkan</label>
-              <select value={unitFilter} onChange={e => setUnitFilter(e.target.value)} className="w-full px-4 py-2.5 border border-indigo-200 rounded-xl text-xs bg-white font-bold outline-none focus:ring-2 focus:ring-indigo-500">
+              <label className="text-[10px] font-extrabold text-[#330B40] uppercase tracking-wider mb-1.5 block">Unit Ditampilkan</label>
+              <select value={unitFilter} onChange={e => setUnitFilter(e.target.value)} className="w-full px-4 py-2.5 border border-[#E3C2ED] rounded-xl text-xs bg-white font-bold outline-none focus:ring-2 focus:ring-[#8A2FA0]">
                 <option value="lembaga-induk">Lembaga Induk / Yayasan Pusat</option>
                 {daftarLembaga.map(u => <option key={u.id} value={u.id}>{u.nama}</option>)}
               </select>
             </div>
           )}
           <div>
-            <label className="text-[10px] font-extrabold text-indigo-900 uppercase tracking-wider mb-1.5 block">Maks. JP / Hari (per Pendidik)</label>
-            <input type="number" min={1} value={maksJpGuruPerHari} onChange={e => { const v = Number(e.target.value) || 1; setMaksJpGuruPerHari(v); save('master_maks_jp_guru_per_hari', v) }} className="w-full px-4 py-2.5 border border-indigo-200 rounded-xl text-xs bg-white font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
+            <label className="text-[10px] font-extrabold text-[#330B40] uppercase tracking-wider mb-1.5 block">Maks. JP / Hari (per Pendidik)</label>
+            <input type="number" min={1} value={maksJpGuruPerHari} onChange={e => { const v = Number(e.target.value) || 1; setMaksJpGuruPerHari(v); save('master_maks_jp_guru_per_hari', v) }} className="w-full px-4 py-2.5 border border-[#E3C2ED] rounded-xl text-xs bg-white font-bold outline-none focus:ring-2 focus:ring-[#8A2FA0]" />
           </div>
 
           {/* TAB NAV */}
@@ -2005,7 +1984,7 @@ export default function JadwalPelajaranPage() {
               ['rekap_guru', '4. Rekap Guru'],
               ['rekap_jadwal', '5. Rekap Jadwal'],
             ] as [typeof tabView, string][]).map(([key, label]) => (
-              <button key={key} onClick={() => setTabView(key)} className={`flex-1 py-2 text-center text-xs font-bold rounded-lg transition ${tabView === key ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-50'}`}>{label}</button>
+              <button key={key} onClick={() => setTabView(key)} className={`flex-1 py-2 text-center text-xs font-bold rounded-lg transition ${tabView === key ? 'bg-[#6A197D] text-white shadow' : 'text-slate-600 hover:bg-slate-50'}`}>{label}</button>
             ))}
           </div>
         </section>
@@ -2017,12 +1996,12 @@ export default function JadwalPelajaranPage() {
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <form onSubmit={handleSimpanWaktu} className="space-y-4 xl:col-span-1 border-r border-slate-100 pr-6">
               <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-                <Clock className="w-4 h-4 text-indigo-600" />
+                <Clock className="w-4 h-4 text-[#6A197D]" />
                 <h2 className="text-xs font-black text-slate-700">Petakan Slot Durasi Waktu</h2>
               </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Tipe Slot</label>
-                <select value={jenisWaktu} onChange={e => setJenisWaktu(e.target.value as any)} className="w-full px-4 py-2.5 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                <select value={jenisWaktu} onChange={e => setJenisWaktu(e.target.value as any)} className="w-full px-4 py-2.5 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#8A2FA0] bg-white">
                   <option value="mapel">Jam Pelajaran (JP)</option>
                   <option value="istirahat">Istirahat / Sholat</option>
                 </select>
@@ -2030,24 +2009,24 @@ export default function JadwalPelajaranPage() {
               {jenisWaktu === 'mapel' && (
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Urutan Jam Ke-</label>
-                  <input type="text" placeholder="1" value={jamKeNomor} onChange={e => setJamKeNomor(e.target.value)} className="w-full px-4 py-2.5 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500" required />
+                  <input type="text" placeholder="1" value={jamKeNomor} onChange={e => setJamKeNomor(e.target.value)} className="w-full px-4 py-2.5 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-[#8A2FA0]" required />
                 </div>
               )}
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Label (Opsional)</label>
-                <input type="text" placeholder="Cth: Istirahat 1" value={labelWaktu} onChange={e => setLabelWaktu(e.target.value)} className="w-full px-4 py-2.5 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500" />
+                <input type="text" placeholder="Cth: Istirahat 1" value={labelWaktu} onChange={e => setLabelWaktu(e.target.value)} className="w-full px-4 py-2.5 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-[#8A2FA0]" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Mulai</label>
-                  <input type="text" placeholder="07.30" value={waktuMulai} onChange={e => setWaktuMulai(e.target.value)} className="w-full px-4 py-2.5 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500" required />
+                  <input type="text" placeholder="07.30" value={waktuMulai} onChange={e => setWaktuMulai(e.target.value)} className="w-full px-4 py-2.5 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-[#8A2FA0]" required />
                 </div>
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Selesai</label>
-                  <input type="text" placeholder="08.10" value={waktuSelesai} onChange={e => setWaktuSelesai(e.target.value)} className="w-full px-4 py-2.5 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500" required />
+                  <input type="text" placeholder="08.10" value={waktuSelesai} onChange={e => setWaktuSelesai(e.target.value)} className="w-full px-4 py-2.5 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-[#8A2FA0]" required />
                 </div>
               </div>
-              <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold text-xs shadow-md hover:bg-indigo-700 transition mt-2">+ Tambah Master Waktu</button>
+              <button type="submit" className="w-full bg-[#6A197D] text-white py-3 rounded-xl font-bold text-xs shadow-md hover:bg-[#571466] transition mt-2">+ Tambah Master Waktu</button>
             </form>
             <div className="xl:col-span-2 space-y-4">
               <h2 className="text-xs font-black text-slate-600 uppercase tracking-wider pb-2 border-b border-slate-100">Tabel Master Waktu</h2>
@@ -2061,9 +2040,9 @@ export default function JadwalPelajaranPage() {
                   <tbody className="divide-y divide-slate-100">
                     {daftarWaktu.map(w => (
                       <tr key={w.id} className="hover:bg-slate-50/70">
-                        <td className="p-3"><span className={`px-2 py-0.5 rounded text-[9px] font-black border uppercase ${w.jenis === 'mapel' ? 'bg-indigo-50 text-indigo-700 border-indigo-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>{w.jenis === 'mapel' ? `JP ${w.jamKe}` : 'Istirahat'}</span></td>
+                        <td className="p-3"><span className={`px-2 py-0.5 rounded text-[9px] font-black border uppercase ${w.jenis === 'mapel' ? 'bg-[#F7ECFA] text-[#571466] border-[#F0DFF5]' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>{w.jenis === 'mapel' ? `JP ${w.jamKe}` : 'Istirahat'}</span></td>
                         <td className="p-3 font-bold">{w.label}</td>
-                        <td className="p-3 font-extrabold text-indigo-600 tracking-wider">{w.mulai} – {w.selesai}</td>
+                        <td className="p-3 font-extrabold text-[#6A197D] tracking-wider">{w.mulai} – {w.selesai}</td>
                         <td className="p-3 text-center"><button onClick={() => handleHapusWaktu(w.id)} className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg transition"><Trash2 className="w-4 h-4" /></button></td>
                       </tr>
                     ))}
@@ -2083,7 +2062,7 @@ export default function JadwalPelajaranPage() {
             {/* Sub-tab */}
             <div className="flex bg-white rounded-xl border border-slate-200 p-1.5 gap-1 w-fit flex-wrap">
               {([['identitas', 'Identitas & Kop'], ['gabungan', 'Kelas Gabungan'], ['giliran', 'Jadwal Giliran'], ['tetap', 'Jadwal Berlaku Umum'], ['larangan', 'Larangan Mapel Beriringan'], ['titimangsa', 'Semester, Titimangsa & TTD']] as const).map(([k, l]) => (
-                <button key={k} onClick={() => setSubTabKelas(k)} className={`px-5 py-2 text-xs font-bold rounded-lg transition ${subTabKelas === k ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-50'}`}>{l}</button>
+                <button key={k} onClick={() => setSubTabKelas(k)} className={`px-5 py-2 text-xs font-bold rounded-lg transition ${subTabKelas === k ? 'bg-[#6A197D] text-white shadow' : 'text-slate-600 hover:bg-slate-50'}`}>{l}</button>
               ))}
             </div>
 
@@ -2092,7 +2071,7 @@ export default function JadwalPelajaranPage() {
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                 <form onSubmit={handleSimpanIdentitasInduk} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
                   <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-                    <Landmark className="w-4 h-4 text-indigo-600" />
+                    <Landmark className="w-4 h-4 text-[#6A197D]" />
                     <h2 className="text-xs font-black text-slate-700">Identitas & Kop — Lembaga Pusat</h2>
                   </div>
                   <p className="text-[10px] text-slate-500 leading-relaxed">
@@ -2106,7 +2085,7 @@ export default function JadwalPelajaranPage() {
                       placeholder={'Cth baris 1: MAJLIS PENDIDIKAN DASAR DAN MENENGAH\nCth baris 2: \'AISYIYAH BOARDING SCHOOL BANDUNG'}
                       value={identitasInduk.kop || ''}
                       onChange={e => updateIdentitasIndukField('kop', e.target.value)}
-                      className="w-full px-4 py-2.5 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                      className="w-full px-4 py-2.5 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-[#8A2FA0] resize-none"
                     />
                     <p className="text-[9px] text-slate-400 mt-1">Bisa diisi 2 baris (tekan Enter untuk baris baru) — ini baris paling atas pada kop, bukan tautan/URL.</p>
                   </div>
@@ -2118,7 +2097,7 @@ export default function JadwalPelajaranPage() {
                       placeholder="Cth: SMP Aisyiyah Boarding School"
                       value={identitasInduk.nama || ''}
                       onChange={e => updateIdentitasIndukField('nama', e.target.value)}
-                      className="w-full px-4 py-2.5 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-4 py-2.5 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-[#8A2FA0]"
                     />
                     <p className="text-[9px] text-slate-400 mt-1">Tampil sebagai baris nama (di bawah Keterangan Lengkap Yayasan) hanya saat mengunduh jadwal keseluruhan.</p>
                   </div>
@@ -2130,7 +2109,7 @@ export default function JadwalPelajaranPage() {
                       placeholder="Cth: Jl. Contoh No. 1, Bandung"
                       value={identitasInduk.alamat || ''}
                       onChange={e => updateIdentitasIndukField('alamat', e.target.value)}
-                      className="w-full px-4 py-2.5 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-4 py-2.5 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-[#8A2FA0]"
                     />
                   </div>
 
@@ -2141,20 +2120,20 @@ export default function JadwalPelajaranPage() {
                       placeholder="https://..."
                       value={identitasInduk.logo_utama || identitasInduk.logo || ''}
                       onChange={e => updateIdentitasIndukField('logo_utama', e.target.value)}
-                      className="w-full px-4 py-2.5 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-4 py-2.5 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-[#8A2FA0]"
                     />
                     <p className="text-[9px] text-slate-400 mt-1">Kolom ini khusus untuk gambar logo — bukan untuk diisi di kolom keterangan yayasan.</p>
                   </div>
 
-                  <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-3 space-y-3">
-                    <p className="text-[10px] font-bold text-indigo-700">Logo yang Ditampilkan di Kop (Jadwal Keseluruhan)</p>
+                  <div className="bg-[#F7ECFA]/50 border border-[#F0DFF5] rounded-xl p-3 space-y-3">
+                    <p className="text-[10px] font-bold text-[#571466]">Logo yang Ditampilkan di Kop (Jadwal Keseluruhan)</p>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Logo Kiri</label>
                         <select
                           value={identitasInduk.logoKiriSumber || 'pusat'}
                           onChange={e => updateIdentitasIndukField('logoKiriSumber', e.target.value)}
-                          className="w-full px-3 py-2 border rounded-lg text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                          className="w-full px-3 py-2 border rounded-lg text-xs font-medium outline-none focus:ring-2 focus:ring-[#8A2FA0] bg-white"
                         >
                           <option value="pusat">Logo Lembaga Pusat</option>
                           {daftarLembaga.map(l => <option key={l.id} value={l.id}>Logo {l.nama}</option>)}
@@ -2165,7 +2144,7 @@ export default function JadwalPelajaranPage() {
                         <select
                           value={identitasInduk.logoKananSumber || 'pusat'}
                           onChange={e => updateIdentitasIndukField('logoKananSumber', e.target.value)}
-                          className="w-full px-3 py-2 border rounded-lg text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                          className="w-full px-3 py-2 border rounded-lg text-xs font-medium outline-none focus:ring-2 focus:ring-[#8A2FA0] bg-white"
                         >
                           <option value="pusat">Logo Lembaga Pusat</option>
                           {daftarLembaga.map(l => <option key={l.id} value={l.id}>Logo {l.nama}</option>)}
@@ -2175,7 +2154,7 @@ export default function JadwalPelajaranPage() {
                     <p className="text-[9px] text-slate-400">Berlaku untuk kop jadwal keseluruhan (semua unit). Jadwal per guru tidak memakai kop/logo.</p>
                   </div>
 
-                  <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold text-xs shadow-md hover:bg-indigo-700 transition flex items-center justify-center gap-2">
+                  <button type="submit" className="w-full bg-[#6A197D] text-white py-3 rounded-xl font-bold text-xs shadow-md hover:bg-[#571466] transition flex items-center justify-center gap-2">
                     <Check className="w-4 h-4" /> Simpan Identitas Lembaga Pusat
                   </button>
                 </form>
@@ -2303,7 +2282,7 @@ export default function JadwalPelajaranPage() {
                           {kg.keterangan && <p className="text-[10px] text-slate-400">{kg.keterangan}</p>}
                         </div>
                         <div className="flex gap-1.5 shrink-0">
-                          <button onClick={() => handleEditGabungan(kg)} className="p-2 text-slate-400 hover:text-indigo-600 rounded-lg"><Edit2 className="w-4 h-4" /></button>
+                          <button onClick={() => handleEditGabungan(kg)} className="p-2 text-slate-400 hover:text-[#6A197D] rounded-lg"><Edit2 className="w-4 h-4" /></button>
                           <button onClick={() => handleHapusGabungan(kg.id)} className="p-2 text-slate-400 hover:text-red-500 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                         </div>
                       </div>
@@ -2411,7 +2390,7 @@ export default function JadwalPelajaranPage() {
                           {jg.keterangan && <p className="text-[10px] text-slate-400">{jg.keterangan}</p>}
                         </div>
                         <div className="flex gap-1.5 shrink-0">
-                          <button onClick={() => handleEditGiliran(jg)} className="p-2 text-slate-400 hover:text-indigo-600 rounded-lg"><Edit2 className="w-4 h-4" /></button>
+                          <button onClick={() => handleEditGiliran(jg)} className="p-2 text-slate-400 hover:text-[#6A197D] rounded-lg"><Edit2 className="w-4 h-4" /></button>
                           <button onClick={() => handleHapusGiliran(jg.id)} className="p-2 text-slate-400 hover:text-red-500 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                         </div>
                       </div>
@@ -2524,12 +2503,12 @@ export default function JadwalPelajaranPage() {
                           </div>
                           <div className="flex flex-wrap gap-2 text-[10px]">
                             <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg font-bold">Hari: {jt.hari}</span>
-                            <span className="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg font-bold">{namaWaktu}</span>
+                            <span className="bg-[#F7ECFA] text-[#571466] px-2.5 py-1 rounded-lg font-bold">{namaWaktu}</span>
                             <span className="bg-sky-50 text-sky-700 px-2.5 py-1 rounded-lg font-bold">{berlakuLabel}</span>
                           </div>
                         </div>
                         <div className="flex gap-1.5 shrink-0">
-                          <button onClick={() => handleEditTetap(jt)} className="p-2 text-slate-400 hover:text-indigo-600 rounded-lg"><Edit2 className="w-4 h-4" /></button>
+                          <button onClick={() => handleEditTetap(jt)} className="p-2 text-slate-400 hover:text-[#6A197D] rounded-lg"><Edit2 className="w-4 h-4" /></button>
                           <button onClick={() => handleHapusTetap(jt.id)} className="p-2 text-slate-400 hover:text-red-500 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                         </div>
                       </div>
@@ -2602,7 +2581,7 @@ export default function JadwalPelajaranPage() {
                         <div className="space-y-2 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <Ban className="w-4 h-4 text-rose-500 shrink-0" />
-                            <span className="font-black text-slate-800 text-sm">Setelah: <span className="text-indigo-700">{namaSetelah}</span></span>
+                            <span className="font-black text-slate-800 text-sm">Setelah: <span className="text-[#571466]">{namaSetelah}</span></span>
                           </div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded">Tidak boleh langsung diikuti:</span>
@@ -2613,7 +2592,7 @@ export default function JadwalPelajaranPage() {
                           <p className="text-[9px] text-slate-400 italic">Berlaku searah — kebalikannya tidak terpengaruh kecuali ada aturan terpisah.</p>
                         </div>
                         <div className="flex gap-1.5 shrink-0">
-                          <button onClick={() => handleEditLarangan(l)} className="p-2 text-slate-400 hover:text-indigo-600 rounded-lg"><Edit2 className="w-4 h-4" /></button>
+                          <button onClick={() => handleEditLarangan(l)} className="p-2 text-slate-400 hover:text-[#6A197D] rounded-lg"><Edit2 className="w-4 h-4" /></button>
                           <button onClick={() => handleHapusLarangan(l.id)} className="p-2 text-slate-400 hover:text-red-500 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                         </div>
                       </div>
@@ -2628,18 +2607,18 @@ export default function JadwalPelajaranPage() {
               <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 xl:col-span-1">
                   <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-                    <Calendar className="w-4 h-4 text-indigo-600" />
+                    <Calendar className="w-4 h-4 text-[#6A197D]" />
                     <h2 className="text-xs font-black text-slate-700">Pengaturan Semester</h2>
                   </div>
                   <p className="text-[10px] text-slate-500">Semester ini akan tampil pada kop hasil unduhan jadwal.</p>
                   <div>
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Semester Aktif</label>
-                    <select value={semesterAktif} onChange={e => handleSimpanSemester(e.target.value)} className="w-full px-4 py-2.5 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                    <select value={semesterAktif} onChange={e => handleSimpanSemester(e.target.value)} className="w-full px-4 py-2.5 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#8A2FA0] bg-white">
                       <option value="Ganjil">Ganjil</option>
                       <option value="Genap">Genap</option>
                     </select>
                   </div>
-                  <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-3 text-[10px] text-indigo-700 font-semibold">
+                  <div className="bg-[#F7ECFA]/50 border border-[#F0DFF5] rounded-xl p-3 text-[10px] text-[#571466] font-semibold">
                     Tahun Ajaran mengikuti data yang aktif di halaman Dashboard: <strong>{tahunAjaranAktif}</strong>
                   </div>
                 </div>
@@ -2669,11 +2648,11 @@ export default function JadwalPelajaranPage() {
 
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 xl:col-span-2">
                   <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-                    <Shield className="w-4 h-4 text-indigo-600" />
+                    <Shield className="w-4 h-4 text-[#6A197D]" />
                     <h2 className="text-xs font-black text-slate-700">Penandatangan (Terdeteksi Otomatis)</h2>
                   </div>
                   <p className="text-[10px] text-slate-500 leading-relaxed">
-                    Penandatangan jadwal <strong>tidak diisi manual di sini</strong>. Jadwal <strong>keseluruhan</strong> (Lembaga Induk) hanya menampilkan <strong>1 penandatangan: Mudir</strong> — tanpa Waka Kurikulum. Jadwal per <strong>unit</strong> menampilkan <strong>2 penandatangan</strong>: Kepala Satuan (kiri) dan Waka Kurikulum (kanan). Data nama diambil otomatis dari halaman <a href="/lembaga" className="underline font-bold text-indigo-700">Identitas Lembaga</a> dan penugasan peran di <a href="/peran/guru" className="underline font-bold text-indigo-700">Kelola Data Guru</a> — pastikan ada guru dengan peran "Waka Kurikulum" yang ditugaskan ke unit terkait agar nama tampil otomatis di kop hasil unduhan unit.
+                    Penandatangan jadwal <strong>tidak diisi manual di sini</strong>. Jadwal <strong>keseluruhan</strong> (Lembaga Induk) hanya menampilkan <strong>1 penandatangan: Mudir</strong> — tanpa Waka Kurikulum. Jadwal per <strong>unit</strong> menampilkan <strong>2 penandatangan</strong>: Kepala Satuan (kiri) dan Waka Kurikulum (kanan). Data nama diambil otomatis dari halaman <a href="/lembaga" className="underline font-bold text-[#571466]">Identitas Lembaga</a> dan penugasan peran di <a href="/peran/guru" className="underline font-bold text-[#571466]">Kelola Data Guru</a> — pastikan ada guru dengan peran "Waka Kurikulum" yang ditugaskan ke unit terkait agar nama tampil otomatis di kop hasil unduhan unit.
                   </p>
 
                   <div className="space-y-3">
@@ -2716,13 +2695,13 @@ export default function JadwalPelajaranPage() {
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <div>
-                      <label className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider mb-1.5 block">Keterangan — Lembaga Induk / Keseluruhan</label>
+                      <label className="text-[10px] font-bold text-[#571466] uppercase tracking-wider mb-1.5 block">Keterangan — Lembaga Induk / Keseluruhan</label>
                       <textarea
                         value={keteranganUnit['semua'] || ''}
                         onChange={e => updateKeteranganUnit('semua', e.target.value)}
                         rows={4}
                         placeholder={'Jadwal Bahasa Inggris dan Kimia bergantian setiap minggu\nLiterasi dan Kewalikelasan bergantian setiap minggu'}
-                        className="w-full px-4 py-2.5 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+                        className="w-full px-4 py-2.5 border rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-[#8A2FA0] resize-y"
                       />
                     </div>
                     {daftarLembaga.map(l => (
@@ -2755,10 +2734,10 @@ export default function JadwalPelajaranPage() {
             <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
               <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3 flex-wrap">
                 <div className="flex items-center gap-2">
-                  <Wand2 className="w-5 h-5 text-indigo-600" />
+                  <Wand2 className="w-5 h-5 text-[#6A197D]" />
                   <h2 className="font-bold text-slate-800 text-sm">Matriks Alokasi JP (per Guru × Mapel × Kelas)</h2>
                 </div>
-                <p className="text-[10px] text-slate-500 max-w-xl">Isikan alokasi JP dengan format: <strong className="text-indigo-700">3</strong> = 3 JP 1 sesi, atau <strong className="text-indigo-700">2, 3</strong> = 5 JP dalam 2 sesi berbeda hari. Data guru bersumber dari Modul Data Pendidik. <span className="text-amber-600 font-semibold">Catatan: sesi 2 JP otomatis ditempatkan berurutan tanpa terpotong istirahat; sesi 3 JP boleh terpotong istirahat.</span></p>
+                <p className="text-[10px] text-slate-500 max-w-xl">Isikan alokasi JP dengan format: <strong className="text-[#571466]">3</strong> = 3 JP 1 sesi, atau <strong className="text-[#571466]">2, 3</strong> = 5 JP dalam 2 sesi berbeda hari. Data guru bersumber dari Modul Data Pendidik. <span className="text-amber-600 font-semibold">Catatan: sesi 2 JP otomatis ditempatkan berurutan tanpa terpotong istirahat; sesi 3 JP boleh terpotong istirahat.</span></p>
               </div>
 
               {daftarGuru.length === 0 && (
@@ -2777,26 +2756,26 @@ export default function JadwalPelajaranPage() {
                       {daftarRombel.map(r => (
                         <th key={r.id} className="p-4 text-center min-w-[75px] bg-sky-50/50 text-sky-800 border-l border-sky-100 uppercase tracking-widest text-[10px]">{r.nama}</th>
                       ))}
-                      <th className="p-4 text-center min-w-[65px] bg-indigo-50/70 text-indigo-800 border-l border-indigo-100 text-[10px]">Total JP</th>
+                      <th className="p-4 text-center min-w-[65px] bg-[#F7ECFA]/70 text-[#450F52] border-l border-[#F0DFF5] text-[10px]">Total JP</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {matriksRows.map((item, idx) => (
                       <tr key={idx} className="hover:bg-slate-50/60">
                         <td className="p-4 font-black text-slate-800 border-r border-slate-50">{item.guru.nama}</td>
-                        <td className="p-4 text-indigo-700 font-bold border-r border-slate-50">{item.mapel.nama}</td>
+                        <td className="p-4 text-[#571466] font-bold border-r border-slate-50">{item.mapel.nama}</td>
                         {daftarRombel.map(r => {
                           const isPJ = item.rombelRelevant.includes(r.id)
                           const key = `${item.guru.id}_${item.mapel.id}_${r.id}`
                           return (
                             <td key={r.id} className="p-2 text-center border-l border-slate-100">
                               {isPJ ? (
-                                <input type="text" placeholder="–" value={matriksRinciJp[key] || ''} onChange={e => { const u = { ...matriksRinciJp, [key]: e.target.value }; setMatriksRinciJp(u); save('matriks_alokasi_rinci_samping', u) }} className="w-16 h-8 border border-slate-200 rounded-lg text-center outline-none focus:ring-2 focus:ring-indigo-500 font-extrabold text-xs shadow-sm bg-white" />
+                                <input type="text" placeholder="–" value={matriksRinciJp[key] || ''} onChange={e => { const u = { ...matriksRinciJp, [key]: e.target.value }; setMatriksRinciJp(u); save('matriks_alokasi_rinci_samping', u) }} className="w-16 h-8 border border-slate-200 rounded-lg text-center outline-none focus:ring-2 focus:ring-[#8A2FA0] font-extrabold text-xs shadow-sm bg-white" />
                               ) : <span className="text-slate-300 text-[10px]">–</span>}
                             </td>
                           )
                         })}
-                        <td className="p-4 text-center border-l border-slate-100 font-black bg-indigo-50/30 text-indigo-900">
+                        <td className="p-4 text-center border-l border-slate-100 font-black bg-[#F7ECFA]/30 text-[#330B40]">
                           {daftarRombel.reduce((s, r) => {
                             if (!item.rombelRelevant.includes(r.id)) return s
                             return s + hitungJpStr(matriksRinciJp[`${item.guru.id}_${item.mapel.id}_${r.id}`] || '')
@@ -2847,11 +2826,11 @@ export default function JadwalPelajaranPage() {
               </div>
               <div className="flex flex-wrap items-end gap-4 pt-2">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-black text-indigo-700 uppercase tracking-wider">Cakupan Generate</label>
+                  <label className="text-[10px] font-black text-[#571466] uppercase tracking-wider">Cakupan Generate</label>
                   <select
                     value={generateScope}
                     onChange={e => setGenerateScope(e.target.value)}
-                    className="px-4 py-2.5 border border-indigo-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 bg-white min-w-[220px]"
+                    className="px-4 py-2.5 border border-[#E3C2ED] rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#8A2FA0] bg-white min-w-[220px]"
                   >
                     <option value="semua">Seluruh Lembaga (semua unit)</option>
                     {daftarLembaga.map(l => <option key={l.id} value={l.id}>Unit: {l.nama} saja</option>)}
@@ -2863,11 +2842,11 @@ export default function JadwalPelajaranPage() {
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 h-fit">
-                  <button onClick={handleGenerate} className={`flex items-center gap-2 ${isGenerating ? 'bg-red-500 hover:bg-red-600' : 'bg-indigo-600 hover:bg-indigo-700'} text-white px-6 py-3 rounded-xl font-extrabold text-xs shadow-md transition`}>
+                  <button onClick={handleGenerate} className={`flex items-center gap-2 ${isGenerating ? 'bg-red-500 hover:bg-red-600' : 'bg-[#6A197D] hover:bg-[#571466]'} text-white px-6 py-3 rounded-xl font-extrabold text-xs shadow-md transition`}>
                     <RefreshCw className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
                     {isGenerating ? 'Batalkan' : 'Generate Jadwal Otomatis'}
                   </button>
-                  {generateProgress && <p className="text-[10px] text-indigo-600 font-semibold animate-pulse max-w-xs">{generateProgress}</p>}
+                  {generateProgress && <p className="text-[10px] text-[#6A197D] font-semibold animate-pulse max-w-xs">{generateProgress}</p>}
                 </div>
               </div>
             </section>
@@ -2949,8 +2928,8 @@ export default function JadwalPelajaranPage() {
                   <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Jadwal tetap (Upacara, Literasi, dll.) ditampilkan otomatis sesuai pengaturan. Sel berwarna biru = jadwal tetap (tidak bisa di-edit di sini).</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-extrabold text-indigo-900 uppercase tracking-wider">Hari:</span>
-                  <select value={hariPlotTabel} onChange={e => setHariPlotTabel(e.target.value)} className="px-3 py-1.5 border border-indigo-200 rounded-xl text-xs bg-indigo-50 font-black text-indigo-950 outline-none">
+                  <span className="text-[10px] font-extrabold text-[#330B40] uppercase tracking-wider">Hari:</span>
+                  <select value={hariPlotTabel} onChange={e => setHariPlotTabel(e.target.value)} className="px-3 py-1.5 border border-[#E3C2ED] rounded-xl text-xs bg-[#F7ECFA] font-black text-[#220729] outline-none">
                     {getHariTampil().map(h => <option key={h} value={h}>{h}</option>)}
                   </select>
                 </div>
@@ -2962,19 +2941,19 @@ export default function JadwalPelajaranPage() {
               <div className="overflow-x-auto max-h-[600px] overflow-y-auto border border-slate-200 rounded-xl">
                 <table className="w-full text-[11px] border-collapse whitespace-nowrap">
                   <thead>
-                    <tr className="bg-indigo-950 text-white font-black tracking-wider text-[10px] uppercase">
-                      <th className="p-3.5 border-r border-indigo-900 min-w-[90px]">Waktu</th>
+                    <tr className="bg-[#220729] text-white font-black tracking-wider text-[10px] uppercase">
+                      <th className="p-3.5 border-r border-[#330B40] min-w-[90px]">Waktu</th>
                       {getRombelForUnit().map(r => (
-                        <th key={r.id} className="p-3.5 border-l border-indigo-900 text-center min-w-[130px]">Kelas {r.nama}</th>
+                        <th key={r.id} className="p-3.5 border-l border-[#330B40] text-center min-w-[130px]">Kelas {r.nama}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {allSlotsUrut.map(slot => (
                       <tr key={slot.id} className={slot.jenis === 'istirahat' ? 'bg-amber-50' : 'hover:bg-slate-50'}>
-                        <td className="p-3.5 bg-slate-50/70 border-r border-slate-200 font-black text-indigo-900">
+                        <td className="p-3.5 bg-slate-50/70 border-r border-slate-200 font-black text-[#330B40]">
                           <p className="text-[10px] uppercase tracking-widest">{slot.label}</p>
-                          <p className="text-[9px] font-extrabold text-indigo-600 mt-1">{slot.mulai}–{slot.selesai}</p>
+                          <p className="text-[9px] font-extrabold text-[#6A197D] mt-1">{slot.mulai}–{slot.selesai}</p>
                         </td>
                         {slot.jenis === 'istirahat' ? (
                           <td colSpan={getRombelForUnit().length} className="text-center text-[10px] font-bold text-amber-700 py-2">— {slot.label} —</td>
@@ -2999,7 +2978,7 @@ export default function JadwalPelajaranPage() {
                             const guruGiliran = jadwalGiliran ? jadwalGiliran.mapelGuruList.map(mg => daftarGuru.find(g => g.id === mg.guruId)?.nama || '').filter(Boolean).join(' / ') : ''
 
                             return (
-                              <td key={r.id} onClick={() => { setEditingCell(cellKey); setEditGuruMapel(jadwalItem ? `${jadwalItem.guruId}|${jadwalItem.mapelId}` : '') }} className={`p-3 border-l border-slate-100 text-center align-middle cursor-pointer transition-colors relative min-h-[60px] ${editingCell === cellKey ? 'bg-amber-50/70 ring-1 ring-amber-400' : 'hover:bg-indigo-50/30'}`}>
+                              <td key={r.id} onClick={() => { setEditingCell(cellKey); setEditGuruMapel(jadwalItem ? `${jadwalItem.guruId}|${jadwalItem.mapelId}` : '') }} className={`p-3 border-l border-slate-100 text-center align-middle cursor-pointer transition-colors relative min-h-[60px] ${editingCell === cellKey ? 'bg-amber-50/70 ring-1 ring-amber-400' : 'hover:bg-[#F7ECFA]/30'}`}>
                                 {editingCell === cellKey ? (
                                   <div className="flex flex-col gap-1.5 items-center justify-center bg-white p-2.5 rounded-xl border border-slate-100 shadow-xl z-20 absolute top-2 left-2 right-2">
                                     <select value={editGuruMapel} onChange={e => setEditGuruMapel(e.target.value)} onClick={e => e.stopPropagation()} className="w-full text-[9px] font-bold border border-slate-200 rounded-lg px-2 py-1 outline-none bg-slate-50">
@@ -3011,7 +2990,7 @@ export default function JadwalPelajaranPage() {
                                       </optgroup>
                                     </select>
                                     <div className="flex gap-1 w-full">
-                                      <button onClick={e => { e.stopPropagation(); handleInlineSave(hariPlotTabel, slot.id, r.id, jadwalItem) }} className="flex-1 bg-indigo-600 text-white text-[9px] font-extrabold py-1.5 rounded-lg flex items-center justify-center gap-1"><Check className="w-3 h-3" /> Simpan</button>
+                                      <button onClick={e => { e.stopPropagation(); handleInlineSave(hariPlotTabel, slot.id, r.id, jadwalItem) }} className="flex-1 bg-[#6A197D] text-white text-[9px] font-extrabold py-1.5 rounded-lg flex items-center justify-center gap-1"><Check className="w-3 h-3" /> Simpan</button>
                                       <button onClick={e => { e.stopPropagation(); setEditingCell(null) }} className="flex-1 bg-slate-100 text-slate-600 text-[9px] font-bold py-1.5 rounded-lg">Batal</button>
                                     </div>
                                   </div>
@@ -3019,7 +2998,7 @@ export default function JadwalPelajaranPage() {
                                   <div className="relative">
                                     {isGabungan && <span title="Kelas Gabungan" className="absolute -top-1 -right-1"><Layers className="w-3 h-3 text-emerald-500" /></span>}
                                     {jadwalGiliran && <span title="Jadwal Giliran" className="absolute -top-1 -left-1"><RotateCcw className="w-3 h-3 text-violet-500" /></span>}
-                                    <p className="text-indigo-950 font-black text-xs leading-none">{mapelItem?.nama || '–'}</p>
+                                    <p className="text-[#220729] font-black text-xs leading-none">{mapelItem?.nama || '–'}</p>
                                     <p className="text-slate-400 font-semibold text-[9px] mt-1.5 truncate max-w-[90px] mx-auto">{guruItem?.nama || '–'}</p>
                                   </div>
                                 ) : (
@@ -3056,18 +3035,18 @@ export default function JadwalPelajaranPage() {
           <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
             <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-3 flex-wrap">
               <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-indigo-600" />
+                <Shield className="w-5 h-5 text-[#6A197D]" />
                 <h2 className="font-bold text-slate-800 text-sm">Rekapitulasi Beban Jam Mengajar Pendidik</h2>
               </div>
               <button
                 onClick={() => { setGuruDownloadTarget('semua-zip'); setShowDownloadGuruModal(true) }}
-                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-md transition"
+                className="flex items-center gap-2 bg-[#6A197D] hover:bg-[#571466] text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-md transition"
               >
                 <Download className="w-4 h-4" /> Unduh Jadwal Per Guru (PDF)
               </button>
             </div>
             <div className="md:w-1/3">
-              <select value={cariGuruId} onChange={e => setCariGuruId(e.target.value)} className="w-full px-4 py-2.5 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+              <select value={cariGuruId} onChange={e => setCariGuruId(e.target.value)} className="w-full px-4 py-2.5 border rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#8A2FA0] bg-white">
                 <option value="">🔍 Semua pendidik</option>
                 {daftarGuru.map(g => <option key={g.id} value={g.id}>{g.nama}</option>)}
               </select>
@@ -3091,7 +3070,7 @@ export default function JadwalPelajaranPage() {
                       <tr key={g.id} className="hover:bg-slate-50/70">
                         <td className="p-4 text-sm font-black text-slate-800">{g.nama}</td>
                         <td className="p-4">
-                          <ul className="list-disc pl-3 text-indigo-700">
+                          <ul className="list-disc pl-3 text-[#571466]">
                             {g.mapelIds?.map((mId: string) => <li key={mId}>{daftarMapel.find(m => m.id === mId)?.nama || mId}</li>)}
                           </ul>
                         </td>
@@ -3112,7 +3091,7 @@ export default function JadwalPelajaranPage() {
                             onClick={() => handleDownloadSatuGuru(g)}
                             disabled={sedangMengunduhGuru}
                             title="Unduh PDF jadwal guru ini"
-                            className="p-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="p-2 text-[#8A2FA0] hover:text-[#571466] hover:bg-[#F7ECFA] rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed"
                           >
                             <Download className="w-4 h-4" />
                           </button>
@@ -3134,12 +3113,12 @@ export default function JadwalPelajaranPage() {
           <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
             <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-3 flex-wrap">
               <div className="flex items-center gap-2">
-                <CheckCircle className="w-5 h-5 text-indigo-600" />
+                <CheckCircle className="w-5 h-5 text-[#6A197D]" />
                 <h2 className="font-bold text-slate-800 text-sm">Rekap Jadwal Lengkap</h2>
               </div>
               <div className="text-[10px] text-slate-500 font-semibold">
                 {modeTampil === 'unit' ? (
-                  <span>Menampilkan kelas untuk unit: <strong className="text-indigo-700">{daftarLembaga.find(l => l.id === unitFilter)?.nama || 'Lembaga Induk'}</strong>{unitFilter !== 'lembaga-induk' && <span className="text-amber-600"> · hanya Senin–Jumat</span>}</span>
+                  <span>Menampilkan kelas untuk unit: <strong className="text-[#571466]">{daftarLembaga.find(l => l.id === unitFilter)?.nama || 'Lembaga Induk'}</strong>{unitFilter !== 'lembaga-induk' && <span className="text-amber-600"> · hanya Senin–Jumat</span>}</span>
                 ) : <span>Menampilkan semua kelas (keseluruhan lembaga)</span>}
               </div>
             </div>
@@ -3153,10 +3132,10 @@ export default function JadwalPelajaranPage() {
 
                 return (
                   <div key={hari} className="border border-slate-200 rounded-2xl overflow-hidden">
-                    <div className="bg-indigo-950 text-white px-5 py-3 flex items-center gap-2">
+                    <div className="bg-[#220729] text-white px-5 py-3 flex items-center gap-2">
                       <Calendar className="w-4 h-4" />
                       <span className="font-black text-sm uppercase tracking-wider">{hari}</span>
-                      <span className="text-indigo-400 text-[10px] font-semibold ml-auto">{jadwalHariIni.length} slot terjadwal</span>
+                      <span className="text-[#B36BC7] text-[10px] font-semibold ml-auto">{jadwalHariIni.length} slot terjadwal</span>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-[11px] border-collapse">
@@ -3179,9 +3158,9 @@ export default function JadwalPelajaranPage() {
                             }
                             return (
                               <tr key={slot.id} className="hover:bg-slate-50/50">
-                                <td className="p-3 font-black text-indigo-900 bg-slate-50/50 border-r border-slate-200">
+                                <td className="p-3 font-black text-[#330B40] bg-slate-50/50 border-r border-slate-200">
                                   <p className="text-[10px]">{slot.label}</p>
-                                  <p className="text-[9px] text-indigo-600 font-extrabold">{slot.mulai}–{slot.selesai}</p>
+                                  <p className="text-[9px] text-[#6A197D] font-extrabold">{slot.mulai}–{slot.selesai}</p>
                                 </td>
                                 {rombelTampil.map(r => {
                                   const tetap = getJadwalTetapUntukSlotRender(hari, slot.id, r.id)
@@ -3289,7 +3268,7 @@ export default function JadwalPelajaranPage() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-5 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
-              <h2 className="font-black text-slate-800 text-lg flex items-center gap-2"><Download className="w-5 h-5 text-indigo-600" /> Unduh Jadwal Per Guru</h2>
+              <h2 className="font-black text-slate-800 text-lg flex items-center gap-2"><Download className="w-5 h-5 text-[#6A197D]" /> Unduh Jadwal Per Guru</h2>
               <button onClick={() => !sedangMengunduhGuru && setShowDownloadGuruModal(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-lg"><X className="w-4 h-4" /></button>
             </div>
             <p className="text-xs text-slate-500">Format mengikuti template "Jadwal Guru" (potret/portrait, tanpa kop/logo — kop hanya dipakai pada jadwal keseluruhan, tabel hari × jam, jadwal piket dan kontak piket). File diunduh sebagai PDF.</p>
@@ -3300,7 +3279,7 @@ export default function JadwalPelajaranPage() {
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Pilih Cakupan</label>
                   <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                     <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-slate-50 transition">
-                      <input type="radio" name="dlg" value="semua-zip" checked={guruDownloadTarget === 'semua-zip'} onChange={() => setGuruDownloadTarget('semua-zip')} className="accent-indigo-600" />
+                      <input type="radio" name="dlg" value="semua-zip" checked={guruDownloadTarget === 'semua-zip'} onChange={() => setGuruDownloadTarget('semua-zip')} className="accent-[#6A197D]" />
                       <div>
                         <p className="font-bold text-sm text-slate-800">Semua Guru (ZIP)</p>
                         <p className="text-[10px] text-slate-500">Satu file ZIP berisi PDF jadwal untuk setiap pendidik ({daftarGuru.length} guru).</p>
@@ -3308,7 +3287,7 @@ export default function JadwalPelajaranPage() {
                     </label>
                     {daftarGuru.map(g => (
                       <label key={g.id} className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-slate-50 transition">
-                        <input type="radio" name="dlg" value={g.id} checked={guruDownloadTarget === g.id} onChange={() => setGuruDownloadTarget(g.id)} className="accent-indigo-600" />
+                        <input type="radio" name="dlg" value={g.id} checked={guruDownloadTarget === g.id} onChange={() => setGuruDownloadTarget(g.id)} className="accent-[#6A197D]" />
                         <div>
                           <p className="font-bold text-sm text-slate-800">{g.nama}</p>
                           <p className="text-[10px] text-slate-500">Unduh PDF jadwal pendidik ini saja.</p>
@@ -3320,7 +3299,7 @@ export default function JadwalPelajaranPage() {
                 </div>
 
                 <div className="flex gap-3 pt-2">
-                  <button onClick={handleProsesDownloadGuru} disabled={!daftarGuru.length} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-md transition disabled:opacity-40 disabled:cursor-not-allowed">
+                  <button onClick={handleProsesDownloadGuru} disabled={!daftarGuru.length} className="flex-1 bg-[#6A197D] hover:bg-[#571466] text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-md transition disabled:opacity-40 disabled:cursor-not-allowed">
                     <Download className="w-4 h-4" /> Unduh
                   </button>
                   <button onClick={() => setShowDownloadGuruModal(false)} className="px-5 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200 transition">Batal</button>
@@ -3329,14 +3308,14 @@ export default function JadwalPelajaranPage() {
             ) : (
               <div className="py-6 space-y-3">
                 <div className="flex items-center justify-center">
-                  <RotateCcw className="w-6 h-6 text-indigo-500 animate-spin" />
+                  <RotateCcw className="w-6 h-6 text-[#8A2FA0] animate-spin" />
                 </div>
                 <p className="text-center text-xs font-bold text-slate-700">
                   Membuat PDF... {progresUnduhGuru.selesai} / {progresUnduhGuru.total}
                 </p>
                 <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                   <div
-                    className="bg-indigo-600 h-2 rounded-full transition-all"
+                    className="bg-[#6A197D] h-2 rounded-full transition-all"
                     style={{ width: `${progresUnduhGuru.total > 0 ? (progresUnduhGuru.selesai / progresUnduhGuru.total) * 100 : 0}%` }}
                   />
                 </div>

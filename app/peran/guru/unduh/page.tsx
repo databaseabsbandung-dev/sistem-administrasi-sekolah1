@@ -1,5 +1,7 @@
 'use client'
+import { useAksesGuard } from '@/lib/useAksesGuard'
 
+import Sidebar from '@/components/Sidebar'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -11,6 +13,7 @@ import {
 export default function UnduhDataGuruPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const diizinkanAkses = useAksesGuard('guru')
   const [namaInduk, setNamaInduk] = useState('Lembaga / Yayasan Pusat')
   const [logoInduk, setLogoInduk] = useState('')
   const [npsnSekolah, setNpsnSekolah] = useState('12345678')
@@ -90,52 +93,12 @@ export default function UnduhDataGuruPage() {
     document.body.removeChild(link)
   }
 
-  if (loading) return <div className="p-8 text-center font-semibold text-[#6A197D]">Memuat Halaman Distribusi Data Guru...</div>
+  if (loading || diizinkanAkses === null) return <div className="p-8 text-center font-semibold text-[#6A197D]">Memuat Halaman Distribusi Data Guru...</div>
+  if (diizinkanAkses === false) return null
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-800 font-opensans">
-      <aside className="w-72 bg-white border-r border-slate-200 flex flex-col justify-between hidden md:flex sticky top-0 h-screen shrink-0">
-        <div className="overflow-y-auto">
-          <div className="h-20 flex flex-col justify-center px-6 border-b border-slate-200 bg-[#F7ECFA]/40">
-             <div className="flex items-center gap-3">
-                {logoInduk ? (
-                  <img src={logoInduk} alt="Logo Utama" className="w-8 h-8 object-contain shrink-0" />
-                ) : (
-                  <Landmark className="w-6 h-6 text-[#6A197D] shrink-0" />
-                )}
-                <h2 className="text-xs font-baloo font-black text-[#22072B] uppercase tracking-widest truncate">{namaInduk}</h2>
-             </div>
-          </div>
-          
-          <nav className="p-4 space-y-1">
-            <Link href="/dashboard" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition">
-              <ArrowLeft className="w-4 h-4" /> Kembali ke Dasbor
-            </Link>
-            
-            <div className="pt-2 pb-1 px-4 text-[9px] font-baloo font-black text-slate-400 uppercase tracking-widest">Sub-menu Folder Peran</div>
-            <Link href="/peran" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition">
-              <Users className="w-4 h-4" /> Pembagian Peran
-            </Link>
-            <Link href="/peran/mapel" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition">
-              <BookOpen className="w-4 h-4" /> Kelola Mata Pelajaran
-            </Link>
-            <Link href="/peran/guru" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition">
-              <UserPlus className="w-4 h-4" /> Kelola Data Guru
-            </Link>
-            
-            <div className="pt-4 pb-1 px-4 text-[9px] font-baloo font-black text-slate-400 uppercase tracking-widest">Pusat Distribusi Akun</div>
-            <Link href="/peran/guru/unduh" className="flex items-center gap-3 px-4 py-3 text-sm font-baloo font-bold text-[#6A197D] bg-[#FFDE59] rounded-xl shadow-md shadow-[#FFF6D1]">
-               <Download className="w-4 h-4" /> Unduh Kredensial Guru
-            </Link>
-          </nav>
-        </div>
-        
-        <div className="p-4 border-t border-slate-200 bg-slate-50">
-          <button onClick={() => { supabase.auth.signOut(); router.push('/') }} className="flex items-center gap-3 px-4 py-2.5 w-full text-sm font-baloo font-bold text-red-600 bg-white border border-red-100 rounded-xl hover:bg-red-50 transition">
-            <LogOut className="w-4 h-4" /> Keluar Sistem
-          </button>
-        </div>
-      </aside>
+      <Sidebar />
 
       <main className="flex-1 p-8 overflow-y-auto max-w-5xl mx-auto space-y-6">
         <header className="flex justify-between items-start flex-wrap gap-4">

@@ -7,10 +7,12 @@ import {
   Building, Landmark, Save, ArrowLeft, LogOut
 } from 'lucide-react'
 import Sidebar from '@/components/Sidebar'
+import { useAksesGuard } from '@/lib/useAksesGuard'
 
 export default function IdentitasLembagaPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const diizinkanAkses = useAksesGuard('lembaga')
   const [namaInduk, setNamaInduk] = useState('Lembaga / Yayasan Pusat')
   
   // State Identitas Lembaga Yayasan Induk (Pusat) - Input manual nama Mudir dihilangkan
@@ -150,31 +152,12 @@ export default function IdentitasLembagaPage() {
     return kepsek ? kepsek.nama : 'Data Kepala Sekolah belum diatur di menu Kelola Data Guru'
   }
 
-  if (loading) return <div className="p-8 text-center font-semibold text-[#6A197D]">Memuat Arsip Identitas...</div>
+  if (loading || diizinkanAkses === null) return <div className="p-8 text-center font-semibold text-[#6A197D]">Memuat Arsip Identitas...</div>
+  if (diizinkanAkses === false) return null
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-800 font-opensans">
-      <aside className="w-72 bg-white border-r border-slate-200 flex flex-col justify-between hidden md:flex sticky top-0 h-screen shrink-0">
-        <div className="overflow-y-auto">
-          <div className="h-16 flex items-center px-6 border-b border-slate-200 bg-[#F7ECFA]/50">
-            <Landmark className="w-6 h-6 text-[#6A197D] mr-3 shrink-0" />
-            <h2 className="text-xs font-baloo font-black text-[#330B40] uppercase tracking-widest truncate max-w-[170px]">{namaInduk}</h2>
-          </div>
-          <nav className="p-4 space-y-1">
-            <a href="/dashboard" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition">
-              <ArrowLeft className="w-4 h-4" /> Kembali ke Dasbor
-            </a>
-            <a href="/lembaga" className="flex items-center gap-3 px-4 py-3 text-sm font-baloo font-bold text-white bg-[#6A197D] rounded-xl shadow-md">
-              <Building className="w-4 h-4" /> Identitas Lembaga
-            </a>
-          </nav>
-        </div>
-        <div className="p-4 border-t border-slate-200 bg-slate-50">
-          <button onClick={() => { supabase.auth.signOut(); router.push('/') }} className="flex items-center gap-3 px-4 py-2.5 w-full text-sm font-baloo font-bold text-red-600 bg-white border border-red-100 rounded-xl hover:bg-red-50 transition">
-            <LogOut className="w-4 h-4" /> Keluar Sistem
-          </button>
-        </div>
-      </aside>
+      <Sidebar />
 
       <main className="flex-1 p-8 overflow-y-auto max-w-5xl mx-auto space-y-8">
         <header className="space-y-1.5">

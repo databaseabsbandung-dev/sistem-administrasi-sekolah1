@@ -1,18 +1,24 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Baloo_2, Open_Sans } from "next/font/google";
 import "./globals.css";
 import { GoogleOAuthProvider } from "@react-oauth/google";
+import CloudSyncProvider from "@/components/CloudSyncProvider";
 
 // Ini adalah kode sakti agar seluruh E-Rapor selalu update data seketika
 export const dynamic = 'force-dynamic';
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Font Tebal / display untuk judul & elemen penting (dipakai lewat class "font-baloo")
+const baloo = Baloo_2({
+  variable: "--font-baloo",
+  weight: ["500", "600", "700", "800"],
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+// Font utama untuk seluruh isi halaman (dipakai lewat class "font-opensans",
+// dan juga menjadi font default seluruh body)
+const openSans = Open_Sans({
+  variable: "--font-opensans",
+  weight: ["400", "500", "600", "700", "800"],
   subsets: ["latin"],
 });
 
@@ -28,12 +34,14 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      lang="id"
+      className={`${baloo.variable} ${openSans.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col font-opensans">
         <GoogleOAuthProvider clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!}>
-          {children}
+          <CloudSyncProvider>
+            {children}
+          </CloudSyncProvider>
         </GoogleOAuthProvider>
       </body>
     </html>

@@ -1,5 +1,7 @@
 'use client'
+import { useAksesGuard } from '@/lib/useAksesGuard'
 
+import Sidebar from '@/components/Sidebar'
 import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../supabase'
@@ -513,6 +515,7 @@ function KartuPerhitunganMingguJam({
 export default function MingguEfektifPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
+  const diizinkanAkses = useAksesGuard('minggu_efektif')
   const [namaInduk, setNamaInduk] = useState('Lembaga / Yayasan Pusat')
   const [logoInduk, setLogoInduk] = useState('')
   const [namaSekolah, setNamaSekolah] = useState('')
@@ -768,7 +771,8 @@ export default function MingguEfektifPage() {
     window.open(url, '_blank')
   }
 
-  if (loading) return <div className="p-8 text-center font-semibold text-[#6A197D]">Memuat Modul Minggu Efektif...</div>
+  if (loading || diizinkanAkses === null) return <div className="p-8 text-center font-semibold text-[#6A197D]">Memuat Modul Minggu Efektif...</div>
+  if (diizinkanAkses === false) return null
 
   // ============================================================
   // RENDER
@@ -791,35 +795,7 @@ export default function MingguEfektifPage() {
       `}</style>
 
       {/* SIDEBAR */}
-      <aside className="w-72 bg-white border-r border-slate-200 flex flex-col justify-between hidden md:flex sticky top-0 h-screen shrink-0">
-        <div className="overflow-y-auto">
-          <div className="h-20 flex flex-col justify-center px-6 border-b border-[#6A197D]/10 bg-[#6A197D]/5">
-            <div className="flex items-center gap-3">
-              {logoInduk ? <img src={logoInduk} alt="Logo" className="w-8 h-8 object-contain shrink-0" />
-                : <Landmark className="w-6 h-6 text-[#6A197D] shrink-0" />}
-              <h2 className="text-xs font-black text-[#2E0B38] uppercase tracking-widest truncate">{namaInduk}</h2>
-            </div>
-          </div>
-          <nav className="p-4 space-y-1">
-            <a href="/dashboard" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><Home className="w-4 h-4" /> Beranda Dasbor</a>
-            <a href="/lembaga" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><Building className="w-4 h-4" /> Identitas Lembaga</a>
-            <a href="/peran" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><Shield className="w-4 h-4" /> Pembagian Peran & Guru</a>
-            <div className="pt-6 pb-2 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Modul Administrasi</div>
-            <a href="/kaldik" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><CalendarDays className="w-4 h-4" /> Kalender Pendidikan</a>
-            <a href="/jadwal" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><Clock className="w-4 h-4" /> Jadwal Pelajaran</a>
-            <a href="/minggu-efektif" className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-white bg-[#6A197D] rounded-xl shadow-md shadow-[#6A197D]/20"><BarChart2 className="w-4 h-4" /> Minggu Efektif</a>
-            <a href="#" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><FileText className="w-4 h-4" /> CP, TP & ATP</a>
-            <a href="#" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><FileSpreadsheet className="w-4 h-4" /> Prota & Promes</a>
-            <a href="#" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"><BookOpen className="w-4 h-4" /> RPP / Modul Ajar</a>
-          </nav>
-        </div>
-        <div className="p-4 border-t border-slate-200 bg-slate-50">
-          <button onClick={() => { supabase.auth.signOut(); router.push('/') }}
-            className="flex items-center gap-3 px-4 py-2.5 w-full text-sm font-bold text-red-600 bg-white border border-red-100 rounded-xl hover:bg-red-50 transition">
-            <LogOut className="w-4 h-4" /> Keluar Sistem
-          </button>
-        </div>
-      </aside>
+      <Sidebar />
 
       {/* MAIN */}
       <main className="flex-1 p-8 overflow-y-auto max-w-6xl mx-auto space-y-8">

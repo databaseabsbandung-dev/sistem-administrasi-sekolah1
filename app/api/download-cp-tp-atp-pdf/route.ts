@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       // ── helper: text shorthand ──
       const txt = (s: string, x: number, yy: number, opts: any = {}) => {
         doc.fillColor(opts.color || DARK)
-           .font(opts.bold ? 'Helvetica-Bold' : 'Helvetica')
+           .font(opts.bold ? 'Times-Bold' : 'Times-Roman')
            .fontSize(opts.size || 8)
            .text(s, x, yy, { width: opts.w, align: opts.align || 'left', lineBreak: opts.wrap !== false })
       }
@@ -291,7 +291,7 @@ export async function POST(request: NextRequest) {
       const range = doc.bufferedPageRange()
       for (let i = 0; i < range.count; i++) {
         doc.switchToPage(range.start + i)
-        doc.fillColor(GRAY).font('Helvetica').fontSize(7)
+        doc.fillColor(GRAY).font('Times-Roman').fontSize(7)
           .text(`Halaman ${i + 1} dari ${range.count}  ·  ${namaMapel} · Kelas ${kelas} · Semester ${semester === '1' ? 'Ganjil' : 'Genap'}`,
             L, doc.page.height - 35, { width: W, align: 'center' })
         doc.moveTo(L, doc.page.height - 40).lineTo(L + W, doc.page.height - 40)

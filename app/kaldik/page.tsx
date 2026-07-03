@@ -1,5 +1,7 @@
 'use client'
+import { useAksesGuard } from '@/lib/useAksesGuard'
 
+import Sidebar from '@/components/Sidebar'
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../supabase'
@@ -700,6 +702,7 @@ function CetakKaldikModal({onClose,namaSekolah,tahunAjaran,daftarAgenda,daftarUn
 export default function KaldikPage() {
   const [userEmail,setUserEmail]=useState<string|null>(null)
   const [loading,setLoading]=useState(true)
+  const diizinkanAkses = useAksesGuard('kaldik')
   const [isMounted,setIsMounted]=useState(false)
   const [dataSiap,setDataSiap]=useState(false)
   const [namaSekolah,setNamaSekolah]=useState('')
@@ -967,7 +970,8 @@ export default function KaldikPage() {
     alert(`${agendaTerpilihSinkron.length} agenda dibuka di tab baru.`);setShowSinkronModal(false)
   }
 
-  if(loading) return <main className="p-8 text-center text-gray-600">Memuat Kalender Pendidikan...</main>
+  if (loading || diizinkanAkses === null) return <main className="p-8 text-center text-gray-600">Memuat Kalender Pendidikan...</main>
+  if (diizinkanAkses === false) return null
 
   return (
     <div className="flex min-h-screen bg-gray-50" style={{fontFamily:"'Open Sans', sans-serif"}}>
@@ -981,19 +985,7 @@ export default function KaldikPage() {
         .font-bold, .font-extrabold, .font-semibold,
         h1, h2, h3, h4, h5, h6 { font-family: 'Baloo 2', sans-serif; }
       `}</style>
-      <aside className="w-64 bg-white border-r border-gray-200 flex-col justify-between hidden md:flex">
-        <div>
-          <div className="h-16 flex items-center px-6 border-b border-gray-200"><h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Navigasi Utama</h2></div>
-          <nav className="p-4 space-y-1">
-            <a href="/dashboard" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-600 rounded-lg hover:bg-gray-50"><Home className="w-4 h-4"/> Beranda Dasbor</a>
-            <a href="/kaldik" className="flex items-center gap-3 px-4 py-3 text-sm font-semibold text-gray-700 bg-gray-100 rounded-lg"><CalendarDays className="w-4 h-4"/> Kalender Pendidikan</a>
-          </nav>
-        </div>
-        <div className="p-4 border-t border-gray-200 bg-gray-50">
-          <p className="text-xs text-gray-500 mb-1">Tahun Ajaran:</p><p className="text-sm font-extrabold text-[#3D0F49] mb-2">{tahunAjaran}</p>
-          <p className="text-xs text-gray-500 mb-1">Masuk sebagai:</p><p className="text-sm font-semibold text-gray-800 truncate">{userEmail}</p>
-        </div>
-      </aside>
+      <Sidebar />
 
       <div className="flex-1 flex flex-col">
         <header className="bg-white shadow-sm border-b p-4 flex justify-between items-center px-8">
