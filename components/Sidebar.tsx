@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 // ⚠️ SESUAIKAN path import supabase ini dengan lokasi file app/supabase.ts di project Anda.
@@ -55,14 +56,9 @@ export default function Sidebar() {
   }, [pathname])
 
   const handleLogout = async () => {
-    const isGuru = !!localStorage.getItem('sesi_guru_login')
-    if (isGuru) {
-      localStorage.removeItem('sesi_guru_login')
-      router.push('/')
-    } else {
-      await supabase.auth.signOut()
-      router.push('/')
-    }
+    localStorage.removeItem('sesi_guru_login')
+    await supabase.auth.signOut()
+    router.push('/')
   }
 
   const bisaLihat = (moduleId: string | null) => {
@@ -99,7 +95,7 @@ export default function Sidebar() {
                     {item.sectionBefore}
                   </div>
                 )}
-                <a
+                <Link
                   href={item.href}
                   className={`font-opensans flex items-center gap-3 px-4 py-3 text-sm rounded-xl transition ${
                     aktif
@@ -108,7 +104,7 @@ export default function Sidebar() {
                   }`}
                 >
                   <Icon className="w-4 h-4" /> {item.label}
-                </a>
+                </Link>
               </div>
             )
           })}

@@ -8,13 +8,15 @@ create table if not exists public.app_storage (
   updated_at  timestamptz not null default now()
 );
 
--- Aktifkan Row Level Security lalu buka akses baca/tulis untuk anon key.
--- CATATAN: ini sengaja dibuat terbuka karena login akun Guru di aplikasi ini
--- BUKAN memakai Supabase Auth (hanya validasi nama + NPSN di sisi klien),
--- sehingga tidak ada sesi terautentikasi yang bisa dijadikan syarat RLS.
--- Kalau nanti ingin lebih aman, pertimbangkan memindahkan login Guru ke
--- Supabase Auth juga, lalu ganti policy di bawah ini agar mensyaratkan
--- auth.role() = 'authenticated'.
+-- RLS: baca (SELECT) tetap dibuka untuk siapapun -- ini SENGAJA, karena
+-- halaman login Guru perlu mencari email guru di data ini SEBELUM guru
+-- tsb berhasil login (ayam-telur: butuh data untuk bisa login). Sesuai
+-- arahan bahwa data sekolah ini tidak tergolong sangat rahasia.
+--
+-- Yang benar-benar ditutup adalah TULIS/UBAH/HAPUS -- wajib sudah login
+-- (Admin atau Guru, karena akun Guru sekarang juga akun Supabase Auth asli,
+-- lihat app/api/admin/buat-akun-guru/route.ts) supaya pengunjung anonim
+-- tidak bisa merusak/menghapus data sekolah.
 alter table public.app_storage enable row level security;
 
 drop policy if exists "app_storage_select" on public.app_storage;
@@ -23,15 +25,15 @@ create policy "app_storage_select" on public.app_storage
 
 drop policy if exists "app_storage_insert" on public.app_storage;
 create policy "app_storage_insert" on public.app_storage
-  for insert with check (true);
+  for insert with check (auth.role() = 'authenticated');
 
 drop policy if exists "app_storage_update" on public.app_storage;
 create policy "app_storage_update" on public.app_storage
-  for update using (true) with check (true);
+  for update using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
 drop policy if exists "app_storage_delete" on public.app_storage;
 create policy "app_storage_delete" on public.app_storage
-  for delete using (true);
+  for delete using (auth.role() = 'authenticated');
 
 -- Aktifkan realtime agar perubahan dari satu perangkat langsung terlihat
 -- (tanpa perlu refresh) di perangkat lain yang sedang online.

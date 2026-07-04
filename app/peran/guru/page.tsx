@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '../../supabase'
+import { buatAkunGuruOtomatis } from '@/lib/buatAkunGuru'
 import { 
   Trash2, Edit2, Users, ArrowLeft, LogOut, Landmark, UserPlus, BookOpen, Layers, CheckSquare, Download, Search, LayoutGrid, ClipboardList
 } from 'lucide-react'
@@ -209,11 +210,21 @@ export default function MasterGuruPage() {
     if (guruId) {
       const updated = daftarGuru.map(item => item.id === guruId ? newGuru : item)
       setDaftarGuru(updated); localStorage.setItem('master_guru', JSON.stringify(updated))
-      alert('Data staf berhasil diperbarui!')
+      const hasil = await buatAkunGuruOtomatis({ email: autoEmail, password: autoPassword, nama: namaGuru })
+      if (!hasil.ok) {
+        alert(`Data staf berhasil diperbarui, TAPI akun login otomatis gagal dibuat: ${hasil.error}\n\nData tetap tersimpan, silakan perbaiki konfigurasi server lalu simpan ulang.`)
+      } else {
+        alert('Data staf berhasil diperbarui, dan akun login otomatis sudah disiapkan!')
+      }
     } else {
       const updated = [...daftarGuru, newGuru]
       setDaftarGuru(updated); localStorage.setItem('master_guru', JSON.stringify(updated))
-      alert('Staf/Guru baru berhasil didaftarkan!')
+      const hasil = await buatAkunGuruOtomatis({ email: autoEmail, password: autoPassword, nama: namaGuru })
+      if (!hasil.ok) {
+        alert(`Staf/Guru baru berhasil didaftarkan, TAPI akun login otomatis gagal dibuat: ${hasil.error}\n\nData tetap tersimpan, silakan perbaiki konfigurasi server lalu simpan ulang.`)
+      } else {
+        alert('Staf/Guru baru berhasil didaftarkan, dan akun login otomatis sudah siap dipakai!')
+      }
     }
     
     setNamaGuru(''); setNipGuru(''); setMapelTerpilih([]); setMapelRombelTerpilih({}); setUnitTerpilih([]); setPeranDipilih([]);
@@ -290,8 +301,22 @@ export default function MasterGuruPage() {
       const updated = [...currentDaftarGuru, ...importedGurus]
       setDaftarGuru(updated)
       localStorage.setItem('master_guru', JSON.stringify(updated))
-      
-      alert(`Impor selesai. ${importedGurus.length} data baru dimasukkan, ${skippedCount} data yang sama telah diperbarui.`)
+
+      // Buat akun login Supabase Auth secara berurutan untuk tiap guru BARU
+      // (data yang sudah ada sebelumnya diasumsikan sudah punya akun).
+      let akunBerhasil = 0
+      let akunGagal = 0
+      for (const g of importedGurus) {
+        const hasil = await buatAkunGuruOtomatis({ email: g.email, password: g.password, nama: g.nama })
+        if (hasil.ok) akunBerhasil++
+        else akunGagal++
+      }
+
+      alert(
+        `Impor selesai. ${importedGurus.length} data baru dimasukkan, ${skippedCount} data yang sama telah diperbarui.\n` +
+        `Akun login otomatis: ${akunBerhasil} berhasil dibuat` +
+        (akunGagal > 0 ? `, ${akunGagal} gagal (cek konfigurasi SUPABASE_SERVICE_ROLE_KEY di server).` : '.')
+      )
       setTabAktif('direktori')
       setLoading(false)
     }

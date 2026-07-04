@@ -12,37 +12,56 @@
 //
 // SOLUSI:
 // Modul ini membuat localStorage.setItem/removeItem juga otomatis mengirim
-// perubahan ke tabel `app_storage` di Supabase (cloud), dan saat aplikasi
-// dibuka di perangkat/akun manapun, ia menarik dulu data terbaru dari cloud
-// sebelum halaman ditampilkan. ​Tidak perlu mengubah kode di tiap halaman
-// (app/dashboard, app/kaldik, app/rpp, dst) karena yang di-"sadap" adalah
-// API localStorage itu sendiri.
+// perubahan ke tabel `app_storage` di Supabase (cloud), dan menarik data
+// terbaru dari cloud setiap kali (1) aplikasi pertama dibuka, dan (2) setiap
+// kali ada orang login (lihat refreshSetelahLogin() yang dipanggil dari
+// app/page.tsx) — supaya ganti akun di tab yang sama pun langsung dapat data
+// terbaru, tidak perlu reload browser.
 //
-// CATATAN KEAMANAN (penting dibaca):
-// Tabel `app_storage` diakses memakai anon key Supabase yang memang publik
-// (ikut ter-bundle di kode frontend). Supaya sinkronisasi ini bisa jalan
-// untuk akun Guru (yang login-nya BUKAN lewat Supabase Auth, hanya validasi
-// nama + NPSN di sisi klien), RLS tabel ini dibuat terbuka (siapapun yang
-// punya anon key bisa baca/tulis). Ini konsisten dengan desain login Guru
-// yang sudah ada sebelumnya (juga tidak diverifikasi di server), tapi kalau
-// aplikasi ini dipakai sungguhan oleh sekolah dengan data sensitif, sangat
-// disarankan upgrade ke Supabase Auth + RLS per-sekolah di kemudian hari.
+// CATATAN PENTING soal token sesi login (lihat harusDikecualikan di bawah):
+// Token sesi Supabase Auth milik browser (key berawalan "sb-") SENGAJA TIDAK
+// PERNAH disinkronkan. Kalau token ini ikut disinkronkan, sesi satu
+// perangkat/akun bisa tertimpa sesi perangkat/akun lain (last-write-wins),
+// yang menyebabkan pengguna terus dilempar balik ke halaman login walau
+// baru saja berhasil masuk. Setiap perangkat WAJIB mengelola sesi loginnya
+// sendiri-sendiri, persis seperti perilaku browser pada umumnya.
+//
+// CATATAN KEAMANAN:
+// Tabel `app_storage` boleh DIBACA siapapun (termasuk yang belum login) —
+// ini sengaja, karena halaman login Guru perlu mencari data guru SEBELUM
+// guru itu berhasil login. Tapi TULIS/UBAH/HAPUS data hanya boleh dilakukan
+// pengguna yang sudah login (Admin atau Guru — keduanya sekarang akun
+// Supabase Auth asli). Lihat supabase/migrations/001_app_storage.sql.
 
 import { supabase } from '@/app/supabase'
 
-// Key yang TIDAK boleh disinkronkan ke cloud — sesi login ini harus tetap
-// unik per-perangkat (device A login sbg Guru X tidak boleh menimpa sesi
-// login device B).
-const KEY_TIDAK_DISINKRONKAN = new Set<string>(['sesi_guru_login'])
+function harusDikecualikan(key: string): boolean {
+  if (key === 'sesi_guru_login') return true
+  if (key.startsWith('sb-')) return true
+  return false
+}
 
 let sudahDipasang = false
 let originalSetItem: (key: string, value: string) => void
 let originalRemoveItem: (key: string) => void
 
+function tulisLokalTanpaKirimUlang(key: string, value: string) {
+  // Dipakai saat MENARIK data dari cloud -> tulis ke localStorage lewat
+  // fungsi asli (bukan versi yang sudah "disadap"), supaya tidak langsung
+  // dikirim balik ke cloud (percuma, datanya memang baru saja dari sana).
+  if (originalSetItem) originalSetItem(key, value)
+  else window.localStorage.setItem(key, value)
+}
+
+function hapusLokalTanpaKirimUlang(key: string) {
+  if (originalRemoveItem) originalRemoveItem(key)
+  else window.localStorage.removeItem(key)
+}
+
 const antrianKirim = new Map<string, ReturnType<typeof setTimeout>>()
 
 function kirimKeCloud(key: string, value: string | null) {
-  if (KEY_TIDAK_DISINKRONKAN.has(key)) return
+  if (harusDikecualikan(key)) return
 
   const timerLama = antrianKirim.get(key)
   if (timerLama) clearTimeout(timerLama)
@@ -67,23 +86,17 @@ function kirimKeCloud(key: string, value: string | null) {
 }
 
 /**
- * Panggil sekali di awal (lihat components/CloudSyncProvider.tsx).
- * 1) Menarik seluruh data terbaru dari cloud ke localStorage perangkat ini.
- * 2) Memasang penyadap agar setiap localStorage.setItem/removeItem
- *    selanjutnya otomatis terkirim ke cloud.
- * 3) Berlangganan perubahan real-time dari perangkat/akun lain.
+ * Menarik seluruh data terbaru dari cloud ke localStorage perangkat ini.
+ * Bisa dipanggil berkali-kali (dipanggil ulang setiap ada yang login).
  */
-export async function initCloudSync(): Promise<void> {
+export async function tarikDataDariCloud(): Promise<void> {
   if (typeof window === 'undefined') return
-
-  // 1) Tarik data terbaru dari cloud lebih dulu, sebelum halaman apapun
-  //    sempat membaca localStorage.
   try {
     const { data, error } = await supabase.from('app_storage').select('key, value')
     if (!error && data) {
       for (const row of data as { key: string; value: string | null }[]) {
-        if (KEY_TIDAK_DISINKRONKAN.has(row.key)) continue
-        window.localStorage.setItem(row.key, row.value ?? '')
+        if (harusDikecualikan(row.key)) continue
+        tulisLokalTanpaKirimUlang(row.key, row.value ?? '')
       }
     } else if (error) {
       console.warn('[cloudSync] Tabel app_storage belum siap / gagal diakses:', error.message)
@@ -91,24 +104,25 @@ export async function initCloudSync(): Promise<void> {
   } catch (e) {
     console.warn('[cloudSync] Gagal menghubungi cloud, memakai data lokal dulu.', e)
   }
+}
 
-  // 2) Pasang penyadap localStorage (hanya sekali).
-  if (!sudahDipasang) {
-    originalSetItem = window.localStorage.setItem.bind(window.localStorage)
-    originalRemoveItem = window.localStorage.removeItem.bind(window.localStorage)
+function pasangPenyadapLocalStorage() {
+  if (sudahDipasang || typeof window === 'undefined') return
+  originalSetItem = window.localStorage.setItem.bind(window.localStorage)
+  originalRemoveItem = window.localStorage.removeItem.bind(window.localStorage)
 
-    window.localStorage.setItem = function (key: string, value: string) {
-      originalSetItem(key, value)
-      kirimKeCloud(key, value)
-    }
-    window.localStorage.removeItem = function (key: string) {
-      originalRemoveItem(key)
-      kirimKeCloud(key, null)
-    }
-    sudahDipasang = true
+  window.localStorage.setItem = function (key: string, value: string) {
+    originalSetItem(key, value)
+    kirimKeCloud(key, value)
   }
+  window.localStorage.removeItem = function (key: string) {
+    originalRemoveItem(key)
+    kirimKeCloud(key, null)
+  }
+  sudahDipasang = true
+}
 
-  // 3) Real-time: kalau perangkat/akun LAIN mengubah data, tarik ke sini juga.
+function pasangRealtimeSubscription() {
   try {
     supabase
       .channel('app_storage_sync')
@@ -117,11 +131,11 @@ export async function initCloudSync(): Promise<void> {
         { event: '*', schema: 'public', table: 'app_storage' },
         (payload: any) => {
           const row = payload.new || payload.old
-          if (!row?.key || KEY_TIDAK_DISINKRONKAN.has(row.key)) return
+          if (!row?.key || harusDikecualikan(row.key)) return
           if (payload.eventType === 'DELETE') {
-            originalRemoveItem(row.key)
+            hapusLokalTanpaKirimUlang(row.key)
           } else {
-            originalSetItem(row.key, row.value ?? '')
+            tulisLokalTanpaKirimUlang(row.key, row.value ?? '')
           }
           // Beritahu bagian UI yang mau bereaksi (opsional, tidak wajib dipakai).
           window.dispatchEvent(new CustomEvent('cloud-sync-update', { detail: { key: row.key } }))
@@ -131,4 +145,29 @@ export async function initCloudSync(): Promise<void> {
   } catch (e) {
     console.warn('[cloudSync] Realtime tidak tersedia, sinkronisasi tetap jalan saat reload halaman.', e)
   }
+}
+
+/**
+ * Panggil SEKALI saat aplikasi pertama dibuka (lihat
+ * components/CloudSyncProvider.tsx):
+ * 1) Menarik seluruh data terbaru dari cloud ke localStorage perangkat ini.
+ * 2) Memasang penyadap agar setiap localStorage.setItem/removeItem
+ *    selanjutnya otomatis terkirim ke cloud.
+ * 3) Berlangganan perubahan real-time dari perangkat/akun lain.
+ */
+export async function initCloudSync(): Promise<void> {
+  if (typeof window === 'undefined') return
+  await tarikDataDariCloud()
+  pasangPenyadapLocalStorage()
+  pasangRealtimeSubscription()
+}
+
+/**
+ * Panggil setiap kali seseorang BERHASIL LOGIN (baik ganti akun di tab yang
+ * sama maupun login pertama kali) — lihat app/page.tsx. Ini memastikan data
+ * yang ditampilkan selalu yang TERBARU dari cloud, walau tidak ada reload
+ * browser sama sekali (navigasi Next.js bersifat SPA / tidak reload penuh).
+ */
+export async function refreshSetelahLogin(): Promise<void> {
+  await tarikDataDariCloud()
 }

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation"; 
 import { supabase } from "./supabase";
+import { refreshSetelahLogin } from "@/lib/cloudSync";
 import { Landmark, User, Lock, ArrowRight } from "lucide-react";
 
 export default function LoginPage() {
@@ -10,28 +11,19 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [npsnSekolah, setNpsnSekolah] = useState("12345678"); 
   
   const router = useRouter();
-
-  useEffect(() => {
-    // Ambil NPSN sekolah tersimpan otomatis untuk validasi sandi guru
-    const storedInduk = localStorage.getItem("identitas_induk");
-    if (storedInduk) {
-      try {
-        const parsed = JSON.parse(storedInduk);
-        const npsnVal = parsed.npsn || parsed.nomor_statistik || parsed.NPSN || parsed.nomorStatistik;
-        if (npsnVal) setNpsnSekolah(String(npsnVal).trim());
-      } catch (e) {
-        // Abaikan jika format penyimpanan belum ada
-      }
-    }
-  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage("");
+
+    // Tarik data terbaru dari cloud dulu (identitas lembaga, master guru, dst)
+    // supaya login (terutama pencarian nama guru) selalu memakai data paling
+    // baru, walaupun perubahan itu baru saja dilakukan Admin di perangkat
+    // lain sesaat sebelumnya.
+    await refreshSetelahLogin();
 
     // Deteksi apakah input berupa Email (mengandung '@') atau Nama Guru (teks biasa)
     const isEmail = identity.includes("@");
@@ -50,17 +42,14 @@ export default function LoginPage() {
         router.push('/dashboard'); 
       }
     } else {
-      // Alur Akses Guru / Kontributor (Validasi lokal Nama + NPSN)
-      if (password !== npsnSekolah) {
-        setMessage("Kata sandi tidak sesuai dengan NPSN sekolah.");
-        setLoading(false);
-        return;
-      }
+      // Alur Akses Guru / Kontributor
+      // Guru mengetik NAMA (bukan email) + sandi (NPSN sekolah). Kita cari dulu
+      // email otomatis guru tsb di data master lokal (sudah tersinkron dari
+      // cloud saat halaman ini dibuka), lalu login sungguhan lewat Supabase
+      // Auth memakai email tsb -- supaya sesi guru juga tervalidasi server,
+      // bukan sekadar cek nama di browser.
+      const daftarGuru = JSON.parse(localStorage.getItem('master_guru') || '[]')
 
-      // Ambil daftar master guru yang didaftarkan pada menu Master Data Guru
-      const daftarGuru = JSON.parse(localStorage.getItem('master_guru') || '[]');
-      
-      // Formula pembersihan gelar, spasi, dan titik yang seragam
       const bersihkanNama = (str: string) => {
         return str
           .split(',')[0]
@@ -72,16 +61,34 @@ export default function LoginPage() {
       const inputNamaBersih = bersihkanNama(identity);
       const guruKetemu = daftarGuru.find((g: any) => bersihkanNama(g.nama) === inputNamaBersih);
 
-      if (guruKetemu) {
-        // Simpan sesi login guru di browser
-        localStorage.setItem('sesi_guru_login', JSON.stringify(guruKetemu));
-        setMessage("Login Guru Berhasil! Mengarahkan ke dasbor...");
-        
-        // PERBAIKAN: Arahkan ke rute /dashboard (karena dasbor sudah disatukan)
-        router.push('/dashboard'); 
-      } else {
+      if (!guruKetemu) {
         setMessage("Nama tidak terdaftar sebagai guru/kontributor di sistem sekolah.");
+        setLoading(false);
+        return;
       }
+
+      if (!guruKetemu.email) {
+        setMessage("Akun guru ini belum punya akun login otomatis. Minta Admin membuka & menyimpan ulang data guru ini di menu Kelola Data Guru.");
+        setLoading(false);
+        return;
+      }
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email: guruKetemu.email,
+        password,
+      });
+
+      if (error) {
+        setMessage("Kata sandi tidak sesuai dengan NPSN sekolah, atau akun belum aktif.");
+        setLoading(false);
+        return;
+      }
+
+      // Simpan sesi login guru di browser (dipakai lib/aksesPeran.ts & Sidebar
+      // untuk menentukan menu/hak akses)
+      localStorage.setItem('sesi_guru_login', JSON.stringify(guruKetemu));
+      setMessage("Login Guru Berhasil! Mengarahkan ke dasbor...");
+      router.push('/dashboard');
     }
     setLoading(false);
   };
