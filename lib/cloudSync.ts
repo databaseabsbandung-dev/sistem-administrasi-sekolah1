@@ -88,9 +88,11 @@ function kirimKeCloud(key: string, value: string | null) {
 /**
  * Menarik seluruh data terbaru dari cloud ke localStorage perangkat ini.
  * Bisa dipanggil berkali-kali (dipanggil ulang setiap ada yang login).
+ * Mengembalikan status supaya bisa ditampilkan ke pengguna kalau gagal
+ * (sebelumnya kegagalan ini cuma console.warn, tidak pernah terlihat).
  */
-export async function tarikDataDariCloud(): Promise<void> {
-  if (typeof window === 'undefined') return
+export async function tarikDataDariCloud(): Promise<{ ok: boolean; error?: string }> {
+  if (typeof window === 'undefined') return { ok: false, error: 'Bukan lingkungan browser.' }
   try {
     const { data, error } = await supabase.from('app_storage').select('key, value')
     if (!error && data) {
@@ -98,11 +100,15 @@ export async function tarikDataDariCloud(): Promise<void> {
         if (harusDikecualikan(row.key)) continue
         tulisLokalTanpaKirimUlang(row.key, row.value ?? '')
       }
+      return { ok: true }
     } else if (error) {
       console.warn('[cloudSync] Tabel app_storage belum siap / gagal diakses:', error.message)
+      return { ok: false, error: error.message }
     }
-  } catch (e) {
+    return { ok: true }
+  } catch (e: any) {
     console.warn('[cloudSync] Gagal menghubungi cloud, memakai data lokal dulu.', e)
+    return { ok: false, error: String(e?.message || e) }
   }
 }
 
@@ -155,11 +161,12 @@ function pasangRealtimeSubscription() {
  *    selanjutnya otomatis terkirim ke cloud.
  * 3) Berlangganan perubahan real-time dari perangkat/akun lain.
  */
-export async function initCloudSync(): Promise<void> {
-  if (typeof window === 'undefined') return
-  await tarikDataDariCloud()
+export async function initCloudSync(): Promise<{ ok: boolean; error?: string }> {
+  if (typeof window === 'undefined') return { ok: false, error: 'Bukan lingkungan browser.' }
+  const hasil = await tarikDataDariCloud()
   pasangPenyadapLocalStorage()
   pasangRealtimeSubscription()
+  return hasil
 }
 
 /**
@@ -168,6 +175,6 @@ export async function initCloudSync(): Promise<void> {
  * yang ditampilkan selalu yang TERBARU dari cloud, walau tidak ada reload
  * browser sama sekali (navigasi Next.js bersifat SPA / tidak reload penuh).
  */
-export async function refreshSetelahLogin(): Promise<void> {
-  await tarikDataDariCloud()
+export async function refreshSetelahLogin(): Promise<{ ok: boolean; error?: string }> {
+  return tarikDataDariCloud()
 }

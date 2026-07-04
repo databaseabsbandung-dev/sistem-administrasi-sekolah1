@@ -42,16 +42,14 @@ export default function UnduhDataGuruPage() {
         const storedGuru = localStorage.getItem('master_guru')
         if (storedGuru) {
           const parsedGuru = JSON.parse(storedGuru).map((g: any) => {
-            const namaPembersihan = g.nama.split(',')[0] || g.nama
-            const namaTanpaGelar = namaPembersihan.trim().toLowerCase().replace(/[^a-z]/g, '')
-            
-            const emailAuto = `${namaTanpaGelar || 'guru'}@abs.sch.id`
-            const passwordAuto = npsnSekolah
-            
+            // PENTING: pakai email/password yang SUNGGUHAN tersimpan di data guru
+            // (g.email / g.password), BUKAN dihitung ulang dari nama -- karena
+            // guru hasil impor CSV dengan nama mirip/duplikat bisa punya sufiks
+            // angka tambahan di emailnya (mis. "budi2@abs.sch.id") supaya unik.
             return {
               ...g,
-              email_abs: emailAuto,
-              password_abs: passwordAuto
+              email_abs: g.email || '(belum ada akun — simpan ulang data guru ini)',
+              password_abs: g.password || npsnSekolah,
             }
           })
           setDaftarGuru(parsedGuru)

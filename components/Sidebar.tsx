@@ -9,7 +9,7 @@ import { supabase } from '@/app/supabase'
 import {
   Landmark, LogOut, Shield, BookOpen, Home, Building,
   CalendarDays, BarChart2, FileText, FileSpreadsheet, Clock,
-  UserPlus, LucideIcon,
+  UserPlus, LucideIcon, Activity,
 } from 'lucide-react'
 import { getAksesInfo, AksesInfo } from '@/lib/aksesPeran'
 
@@ -34,6 +34,7 @@ const MENU_ITEMS: MenuItem[] = [
   { moduleId: 'cp_tp_atp',      href: '/cp-tp-atp',      label: 'CP, TP & ATP',         icon: FileText },
   { moduleId: 'prota_promes',   href: '/prota-promes',   label: 'Prota & Promes',       icon: FileSpreadsheet },
   { moduleId: 'rpp',            href: '/rpp',            label: 'RPP / Modul Ajar',     icon: BookOpen },
+  { moduleId: 'diagnostik',     href: '/status-sinkronisasi', label: 'Status Sinkronisasi', icon: Activity, sectionBefore: 'Sistem' },
 ]
 
 export default function Sidebar() {

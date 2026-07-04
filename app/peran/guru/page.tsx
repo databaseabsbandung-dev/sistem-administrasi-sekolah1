@@ -381,9 +381,17 @@ export default function MasterGuruPage() {
       <Sidebar />
 
       <main className="flex-1 p-8 overflow-y-auto max-w-6xl mx-auto space-y-6">
-        <header className="space-y-1.5">
-           <h1 className="text-2xl font-baloo font-black text-slate-900">Master Data & Penugasan Staf</h1>
-           <p className="text-xs text-gray-500">Daftar data staf/pendidik, serta tautkan penugasan unit, mata pelajaran, dan kelas (bisa dikosongkan jika tidak mengajar).</p>
+        <header className="flex justify-between items-start flex-wrap gap-4">
+           <div className="space-y-1.5">
+              <h1 className="text-2xl font-baloo font-black text-slate-900">Master Data & Penugasan Staf</h1>
+              <p className="text-xs text-gray-500">Daftar data staf/pendidik, serta tautkan penugasan unit, mata pelajaran, dan kelas (bisa dikosongkan jika tidak mengajar).</p>
+           </div>
+           <Link
+              href="/peran/guru/unduh"
+              className="flex items-center gap-2 bg-[#FFDE59] hover:bg-[#E6C850] text-[#6A197D] font-baloo font-extrabold px-5 py-3 rounded-xl shadow-sm text-xs transition shrink-0"
+           >
+              <Download className="w-4 h-4" /> Lihat & Unduh Data Akun Guru
+           </Link>
         </header>
 
         {/* TAB NAVIGATION CONTROLLER */}

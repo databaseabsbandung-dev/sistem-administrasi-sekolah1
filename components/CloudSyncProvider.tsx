@@ -10,13 +10,18 @@ import { initCloudSync } from '@/lib/cloudSync'
  */
 export default function CloudSyncProvider({ children }: { children: React.ReactNode }) {
   const [siap, setSiap] = useState(false)
+  const [errorSinkron, setErrorSinkron] = useState<string | null>(null)
 
   useEffect(() => {
     let selesai = false
-    initCloudSync().finally(() => {
-      selesai = true
-      setSiap(true)
-    })
+    initCloudSync()
+      .then(hasil => {
+        if (!hasil.ok) setErrorSinkron(hasil.error || 'Gagal terhubung ke cloud.')
+      })
+      .finally(() => {
+        selesai = true
+        setSiap(true)
+      })
     // Jaga-jaga bila koneksi lambat/terputus, jangan biarkan pengguna
     // terjebak di layar loading selamanya.
     const batasWaktu = setTimeout(() => {
@@ -36,5 +41,15 @@ export default function CloudSyncProvider({ children }: { children: React.ReactN
     )
   }
 
-  return <>{children}</>
+  return (
+    <>
+      {errorSinkron && (
+        <div className="bg-red-600 text-white text-xs font-opensans font-semibold px-4 py-2 text-center">
+          ⚠️ Sinkronisasi cloud gagal: {errorSinkron} — data mungkin tidak ter-update lintas perangkat.
+          Buka menu &quot;Status Sinkronisasi&quot; untuk detail.
+        </div>
+      )}
+      {children}
+    </>
+  )
 }
