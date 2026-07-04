@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Sidebar from '@/components/Sidebar'
 import { supabase } from '@/app/supabase'
 import { useAksesGuard } from '@/lib/useAksesGuard'
+import { useRouter } from 'next/navigation'
 
 type Status = 'menunggu' | 'jalan' | 'lulus' | 'gagal'
 
@@ -21,12 +22,27 @@ const LANGKAH_AWAL: Langkah[] = [
   { id: 'select2', judul: '4) Baca kembali data uji yang baru ditulis', status: 'menunggu' },
   { id: 'delete', judul: '5) Hapus data uji (DELETE, membersihkan)', status: 'menunggu' },
   { id: 'patch', judul: '6) Uji alur ASLI aplikasi: localStorage.setItem → otomatis terkirim ke cloud?', status: 'menunggu' },
+  { id: 'servicerole', judul: '7) Cek konfigurasi pembuatan akun Guru otomatis (SUPABASE_SERVICE_ROLE_KEY)', status: 'menunggu' },
 ]
 
 export default function StatusSinkronisasiPage() {
   const diizinkanAkses = useAksesGuard('diagnostik')
   const [langkah, setLangkah] = useState<Langkah[]>(LANGKAH_AWAL)
   const [berjalan, setBerjalan] = useState(false)
+  const [isAdminAsli, setIsAdminAsli] = useState<boolean | null>(null)
+  const router = useRouter()
+
+  useEffect(() => {
+    // Lapisan tambahan: pastikan yang mengakses ini benar-benar akun yang
+    // didaftarkan langsung di Supabase (bukan akun Guru), dicek dari
+    // metadata akun sungguhan -- bukan cuma tanda lokal di browser.
+    supabase.auth.getSession().then(({ data }) => {
+      const role = (data.session?.user?.user_metadata as any)?.role
+      const asli = !!data.session && role !== 'guru'
+      setIsAdminAsli(asli)
+      if (!asli) router.replace('/dashboard')
+    })
+  }, [router])
 
   const perbarui = (id: string, patch: Partial<Langkah>) => {
     setLangkah(prev => prev.map(l => (l.id === id ? { ...l, ...patch } : l)))
@@ -153,6 +169,39 @@ export default function StatusSinkronisasiPage() {
       perbarui('patch', { status: 'gagal', detail: String(e?.message || e) })
     }
 
+    // 7) Cek apakah SUPABASE_SERVICE_ROLE_KEY sudah dikonfigurasi -- ini
+    //    yang dipakai untuk membuat akun login Guru otomatis. Kalau belum
+    //    diisi, data guru tetap tersimpan tapi akunnya TIDAK PERNAH aktif.
+    perbarui('servicerole', { status: 'jalan' })
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) {
+        perbarui('servicerole', { status: 'gagal', detail: 'Tidak ada sesi login, tidak bisa mengecek.' })
+      } else {
+        const res = await fetch('/api/admin/buat-akun-guru', {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const json = await res.json()
+        if (!res.ok) {
+          perbarui('servicerole', { status: 'gagal', detail: json?.error || 'Gagal mengecek konfigurasi.' })
+        } else if (json.adaServiceRoleKey) {
+          perbarui('servicerole', {
+            status: 'lulus',
+            detail: 'SUPABASE_SERVICE_ROLE_KEY sudah terkonfigurasi. Akun Guru otomatis seharusnya aktif saat disimpan/diimpor.',
+          })
+        } else {
+          perbarui('servicerole', {
+            status: 'gagal',
+            detail: 'SUPABASE_SERVICE_ROLE_KEY BELUM diisi di environment variable server. Inilah sebabnya akun Guru tidak pernah benar-benar aktif walau datanya tersimpan. Tambahkan key ini di pengaturan Environment Variables Vercel Anda, lalu deploy ulang, lalu simpan ulang data guru yang bersangkutan.',
+          })
+        }
+      }
+    } catch (e: any) {
+      perbarui('servicerole', { status: 'gagal', detail: String(e?.message || e) })
+    }
+
     setBerjalan(false)
   }
 
@@ -165,8 +214,8 @@ export default function StatusSinkronisasiPage() {
   const label = (s: Status) =>
     s === 'lulus' ? '✅ Lulus' : s === 'gagal' ? '❌ Gagal' : s === 'jalan' ? '⏳ Berjalan...' : '⏸ Menunggu'
 
-  if (diizinkanAkses === null) return <div className="p-8 text-center font-semibold text-[#6A197D]">Memuat...</div>
-  if (diizinkanAkses === false) return null
+  if (diizinkanAkses === null || isAdminAsli === null) return <div className="p-8 text-center font-semibold text-[#6A197D]">Memuat...</div>
+  if (diizinkanAkses === false || isAdminAsli === false) return null
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-800 font-opensans">

@@ -30,13 +30,21 @@ export default function LoginPage() {
 
     if (isEmail) {
       // Alur Akses Admin / Kurikulum (Menggunakan Auth Supabase)
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: identity,
         password,
       });
 
       if (error) {
         setMessage(`Gagal masuk Admin: ${error.message}`);
+      } else if (data.user?.user_metadata?.role === 'guru') {
+        // PENTING: akun Guru dibuat otomatis sebagai akun Supabase Auth asli
+        // (lihat app/api/admin/buat-akun-guru), jadi SECARA TEKNIS akun itu
+        // bisa saja dicoba login lewat kolom Email Admin ini. Kita tolak di
+        // sini supaya Guru tidak bisa mendapat akses admin penuh (menembus
+        // batasan peran) hanya dengan memasukkan email mereka sendiri.
+        await supabase.auth.signOut();
+        setMessage("Akun ini adalah akun Guru. Silakan login lewat kolom \"Nama Lengkap (Guru)\" di atas, bukan kolom Email Admin.");
       } else {
         setMessage("Login Admin Berhasil! Menghubungkan ke sistem...");
         router.push('/dashboard'); 

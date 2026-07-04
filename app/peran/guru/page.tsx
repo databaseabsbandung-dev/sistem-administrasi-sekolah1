@@ -34,6 +34,8 @@ export default function MasterGuruPage() {
   const [daftarGuru, setDaftarGuru] = useState<any[]>([])
   const [namaGuru, setNamaGuru] = useState('')
   const [nipGuru, setNipGuru] = useState('')
+  const [namaAkunGuru, setNamaAkunGuru] = useState('')
+  const [passwordGuru, setPasswordGuru] = useState('')
   const [unitTerpilih, setUnitTerpilih] = useState<string[]>([]) 
   const [editGuruId, setEditGuruId] = useState<string | null>(null)
 
@@ -181,17 +183,20 @@ export default function MasterGuruPage() {
       }
     }
     
-    const bersihkanNama = (str: string) => {
-      return str
-        .split(',')[0]
-        .replace(/\./g, '')
-        .replace(/\s+/g, '')
-        .toLowerCase();
+    // Nama akun: pakai yang diketik admin (kalau ada), atau otomatis dari
+    // 2 kata pertama nama (tanpa gelar) kalau dikosongkan.
+    const bersihkanTeksAkun = (str: string) => str.replace(/[^a-zA-Z]/g, '').toLowerCase()
+    const turunkanNamaAkunOtomatis = (namaLengkap: string) => {
+      const namaTanpaGelar = namaLengkap.split(',')[0].trim()
+      const duaKataDepan = namaTanpaGelar.split(/\s+/).filter(Boolean).slice(0, 2).join('')
+      return bersihkanTeksAkun(duaKataDepan) || 'guru'
     }
-    
-    const namaLoginId = bersihkanNama(namaGuru) || 'guru'
-    const autoEmail = `${namaLoginId}@abs.sch.id`
-    const autoPassword = npsnSekolah
+
+    const namaLoginId = namaAkunGuru.trim()
+      ? bersihkanTeksAkun(namaAkunGuru)
+      : turunkanNamaAkunOtomatis(namaGuru)
+    const autoEmail = `${namaLoginId || 'guru'}@abs.sch.id`
+    const autoPassword = passwordGuru.trim() || '123456'
 
     setLoading(true)
     
@@ -227,7 +232,7 @@ export default function MasterGuruPage() {
       }
     }
     
-    setNamaGuru(''); setNipGuru(''); setMapelTerpilih([]); setMapelRombelTerpilih({}); setUnitTerpilih([]); setPeranDipilih([]);
+    setNamaGuru(''); setNipGuru(''); setNamaAkunGuru(''); setPasswordGuru(''); setMapelTerpilih([]); setMapelRombelTerpilih({}); setUnitTerpilih([]); setPeranDipilih([]);
     setEditGuruId(null)
     setTabAktif('direktori') 
     setLoading(false)
@@ -242,60 +247,92 @@ export default function MasterGuruPage() {
     reader.onload = async (event) => {
       const text = event.target?.result as string
       const lines = text.split(/\r?\n/).map(line => line.trim()).filter(line => line !== '')
-      const rows = lines.slice(1)
+      const rows = lines.slice(1) // baris pertama = header, dilewati
       const importedGurus: any[] = []
       let skippedCount = 0
 
       let currentDaftarGuru = [...daftarGuru]
 
-      for (let row of rows) {
-        const delimiter = row.includes(';') ? ';' : ','
-        const cols = row.split(delimiter).map(c => c.trim().replace(/^["']|["']$/g, '')) 
-        
-        if (cols.length >= 1) {
-          const nama = cols[0] ? cols[0].trim() : ''
-          const nip = cols[1] ? cols[1].trim() : '' 
+      // Kumpulan nama akun (bagian sebelum @abs.sch.id) yang SUDAH dipakai,
+      // supaya tidak ada dua guru dengan email login yang sama persis.
+      const namaAkunTerpakai = new Set<string>(
+        currentDaftarGuru
+          .map((g: any) => (g.email || '').split('@')[0])
+          .filter(Boolean)
+      )
 
-          if (!nama) continue 
+      const bersihkanTeksAkun = (str: string) => str.replace(/[^a-zA-Z]/g, '').toLowerCase()
 
-          const existingIndex = currentDaftarGuru.findIndex(
-            (g) => g.nama.trim().toLowerCase() === nama.trim().toLowerCase() && g.nip === nip
-          )
+      // Kalau Kolom B (Nama Akun) dikosongkan di CSV, turunkan otomatis
+      // dari 2 kata pertama Nama Lengkap (tanpa gelar).
+      const turunkanNamaAkunOtomatis = (namaLengkap: string) => {
+        const namaTanpaGelar = namaLengkap.split(',')[0].trim()
+        const duaKataDepan = namaTanpaGelar.split(/\s+/).filter(Boolean).slice(0, 2).join('')
+        return bersihkanTeksAkun(duaKataDepan) || 'guru'
+      }
 
-          const bersihkanNama = (str: string) => {
-             return str
-               .split(',')[0]
-               .replace(/\./g, '')
-               .replace(/\s+/g, '')
-               .toLowerCase();
-          }
-          
-          const namaLoginId = bersihkanNama(nama) || 'guru'
-          const randomNum = Math.floor(100 + Math.random() * 900)
-          const autoEmail = `${namaLoginId}${randomNum}@abs.sch.id`
-          const autoPassword = npsnSekolah
-
-          if (existingIndex !== -1) {
-            currentDaftarGuru[existingIndex] = {
-              ...currentDaftarGuru[existingIndex],
-              nama,
-              nip
-            }
-            skippedCount++
-          } else {
-            importedGurus.push({
-              id: 'guru-' + Date.now() + Math.random(),
-              nama, 
-              nip, 
-              mapelIds: [],
-              mapelRombel: {},
-              unitIds: [], 
-              peranIds: [], 
-              email: autoEmail,
-              password: autoPassword
-            })
-          }
+      const pastikanNamaAkunUnik = (namaAkunAwal: string) => {
+        let kandidat = namaAkunAwal
+        let counter = 2
+        while (namaAkunTerpakai.has(kandidat)) {
+          kandidat = `${namaAkunAwal}${counter}`
+          counter++
         }
+        namaAkunTerpakai.add(kandidat)
+        return kandidat
+      }
+
+      for (let row of rows) {
+        // Pakai titik-koma (;) sebagai pemisah kalau ada -- nama guru sering
+        // mengandung koma dari gelar (mis. "Ahmad Fauzi, S.Pd"), jadi koma
+        // biasa TIDAK aman dipakai sebagai pemisah kolom.
+        const delimiter = row.includes(';') ? ';' : ','
+        const cols = row.split(delimiter).map(c => c.trim().replace(/^["']|["']$/g, ''))
+
+        // Kolom A: Nama Lengkap & Gelar (wajib)
+        // Kolom B: Nama Akun (opsional -- kosongkan untuk otomatis)
+        // Kolom C: Kata Sandi (opsional -- kosongkan untuk otomatis "123456")
+        // Kolom D: NIP/NUPTK (opsional)
+        const nama = cols[0] ? cols[0].trim() : ''
+        const namaAkunInput = cols[1] ? cols[1].trim() : ''
+        const passwordInput = cols[2] ? cols[2].trim() : ''
+        const nip = cols[3] ? cols[3].trim() : ''
+
+        if (!nama) continue
+
+        const existingIndex = currentDaftarGuru.findIndex(
+          (g) => g.nama.trim().toLowerCase() === nama.trim().toLowerCase() && g.nip === nip
+        )
+
+        if (existingIndex !== -1) {
+          // Guru yang sama (nama & NIP identik) sudah ada -- perbarui data
+          // umumnya saja, TIDAK mengubah akun/password yang sudah aktif
+          // (supaya tidak tiba-tiba mengganti kredensial yang sudah dipakai).
+          currentDaftarGuru[existingIndex] = {
+            ...currentDaftarGuru[existingIndex],
+            nama,
+            nip,
+          }
+          skippedCount++
+          continue
+        }
+
+        const namaAkunAwal = namaAkunInput ? bersihkanTeksAkun(namaAkunInput) : turunkanNamaAkunOtomatis(nama)
+        const namaAkun = pastikanNamaAkunUnik(namaAkunAwal || 'guru')
+        const autoEmail = `${namaAkun}@abs.sch.id`
+        const autoPassword = passwordInput || '123456'
+
+        importedGurus.push({
+          id: 'guru-' + Date.now() + Math.random(),
+          nama,
+          nip,
+          mapelIds: [],
+          mapelRombel: {},
+          unitIds: [],
+          peranIds: [],
+          email: autoEmail,
+          password: autoPassword,
+        })
       }
 
       const updated = [...currentDaftarGuru, ...importedGurus]
@@ -315,7 +352,7 @@ export default function MasterGuruPage() {
       alert(
         `Impor selesai. ${importedGurus.length} data baru dimasukkan, ${skippedCount} data yang sama telah diperbarui.\n` +
         `Akun login otomatis: ${akunBerhasil} berhasil dibuat` +
-        (akunGagal > 0 ? `, ${akunGagal} gagal (cek konfigurasi SUPABASE_SERVICE_ROLE_KEY di server).` : '.')
+        (akunGagal > 0 ? `, ${akunGagal} gagal (cek konfigurasi SUPABASE_SERVICE_ROLE_KEY di server -- lihat menu Status Sinkronisasi).` : '.')
       )
       setTabAktif('direktori')
       setLoading(false)
@@ -324,7 +361,15 @@ export default function MasterGuruPage() {
   }
 
   const handleUnduhTemplat = () => {
-    const csvTemplate = `Nama Lengkap,Nomor Induk Pendidik (NIP/NUPTK)\r\nDr. H. Ahmad, M.Pd,198001012005011001\r\nHj. Siti Aminah, S.Pd,\r\n`
+    // Kolom A: Nama Lengkap & Gelar (wajib)
+    // Kolom B: Nama Akun -- kosongkan untuk otomatis (2 kata pertama nama, tanpa gelar)
+    // Kolom C: Kata Sandi -- kosongkan untuk otomatis "123456"
+    // Kolom D: NIP/NUPTK (opsional)
+    // Pemisah kolom pakai titik-koma (;) karena nama sering mengandung koma dari gelar.
+    const csvTemplate =
+      `Nama Lengkap & Gelar;Nama Akun (opsional);Kata Sandi (opsional);NIP/NUPTK (opsional)\r\n` +
+      `Ahmad Fauzi, M.Pd;ahmadfauzi;123456;198001012005011001\r\n` +
+      `Siti Aminah, S.Pd;;;\r\n`
     const encodedUri = encodeURI("data:text/csv;charset=utf-8," + csvTemplate)
     const link = document.createElement("a")
     link.setAttribute("href", encodedUri)
@@ -333,6 +378,7 @@ export default function MasterGuruPage() {
     link.click()
     document.body.removeChild(link)
   }
+
 
   const handleEditGuruClick = (item: any) => {
     setEditGuruId(item.id)
@@ -354,7 +400,13 @@ export default function MasterGuruPage() {
       })
     }
     setMapelRombelTerpilih(loadedMapelRombel)
-    
+
+    // Isi ulang nama akun (bagian sebelum @abs.sch.id) & password, supaya
+    // admin bisa lihat/ubah kredensial guru ini langsung dari form edit.
+    const emailLama: string = item.email || ''
+    setNamaAkunGuru(emailLama.includes('@') ? emailLama.split('@')[0] : '')
+    setPasswordGuru(item.password || '')
+
     setTabAktif('formulir')
   }
 
@@ -423,6 +475,18 @@ export default function MasterGuruPage() {
                  <div>
                     <label className="text-[10px] font-baloo font-bold text-slate-500 uppercase tracking-wider mb-1 block">NIP / Nomor Identitas</label>
                     <input type="text" placeholder="NIP / NUPTK / ID Pegawai" value={nipGuru} onChange={e => setNipGuru(e.target.value)} className="w-full px-4 py-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#8A3499]" />
+                 </div>
+                 <div className="grid grid-cols-2 gap-3">
+                    <div>
+                       <label className="text-[10px] font-baloo font-bold text-slate-500 uppercase tracking-wider mb-1 block">Nama Akun (Opsional)</label>
+                       <input type="text" placeholder="Kosongkan = otomatis dari nama" value={namaAkunGuru} onChange={e => setNamaAkunGuru(e.target.value)} className="w-full px-4 py-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#8A3499]" />
+                       <p className="text-[9px] text-slate-400 mt-1">Dipakai untuk login: <span className="font-mono">namaakun@abs.sch.id</span></p>
+                    </div>
+                    <div>
+                       <label className="text-[10px] font-baloo font-bold text-slate-500 uppercase tracking-wider mb-1 block">Kata Sandi (Opsional)</label>
+                       <input type="text" placeholder="Kosongkan = otomatis 123456" value={passwordGuru} onChange={e => setPasswordGuru(e.target.value)} className="w-full px-4 py-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#8A3499]" />
+                       <p className="text-[9px] text-slate-400 mt-1">Bisa diubah lagi nanti di menu &quot;Lihat &amp; Unduh Data Akun Guru&quot;.</p>
+                    </div>
                  </div>
                  
                  <div className="p-4 border border-slate-200 rounded-xl bg-slate-50/50">
@@ -539,7 +603,14 @@ export default function MasterGuruPage() {
                  <div className="flex flex-col gap-2.5 p-3.5 bg-slate-50/70 border border-dashed border-slate-300 rounded-xl mt-4">
                     <div>
                        <label className="text-[10px] font-baloo font-extrabold text-slate-600 uppercase tracking-wider">Impor Data Staf via CSV</label>
-                       <button type="button" onClick={handleUnduhTemplat} className="flex items-center gap-1.5 mt-1 text-[9px] font-baloo font-black bg-[#F7ECFA] text-[#57146A] hover:bg-[#EFD9F5] px-3 py-1.5 rounded-lg border border-[#EFD9F5] transition shadow-sm w-fit">
+                       <p className="text-[9px] text-slate-500 mt-1 leading-relaxed">
+                         Format kolom: <strong>A</strong> = Nama Lengkap &amp; Gelar (wajib),{' '}
+                         <strong>B</strong> = Nama Akun (opsional, kosongkan untuk otomatis dari 2 kata depan nama),{' '}
+                         <strong>C</strong> = Kata Sandi (opsional, kosongkan untuk otomatis &quot;123456&quot;),{' '}
+                         <strong>D</strong> = NIP/NUPTK (opsional). Nama Akun &amp; Kata Sandi bisa diubah lagi nanti
+                         di menu &quot;Lihat &amp; Unduh Data Akun Guru&quot;.
+                       </p>
+                       <button type="button" onClick={handleUnduhTemplat} className="flex items-center gap-1.5 mt-2 text-[9px] font-baloo font-black bg-[#F7ECFA] text-[#57146A] hover:bg-[#EFD9F5] px-3 py-1.5 rounded-lg border border-[#EFD9F5] transition shadow-sm w-fit">
                           <Download className="w-3.5 h-3.5" /> Unduh Templat Format Contoh CSV
                        </button>
                     </div>
@@ -556,7 +627,7 @@ export default function MasterGuruPage() {
                     <button type="submit" className="flex-1 bg-[#6A197D] text-white py-3 rounded-xl font-baloo font-bold shadow-md hover:bg-[#57146A]">
                       {editGuruId ? 'Simpan Perubahan Data' : '+ Daftarkan Staf/Guru'}
                     </button>
-                    {editGuruId && <button type="button" onClick={() => { setEditGuruId(null); setNamaGuru(''); setNipGuru(''); setMapelTerpilih([]); setMapelRombelTerpilih({}); setUnitTerpilih([]); setPeranDipilih([]) }} className="px-5 bg-slate-100 rounded-xl font-baloo font-bold text-slate-600">Batal</button>}
+                    {editGuruId && <button type="button" onClick={() => { setEditGuruId(null); setNamaGuru(''); setNipGuru(''); setNamaAkunGuru(''); setPasswordGuru(''); setMapelTerpilih([]); setMapelRombelTerpilih({}); setUnitTerpilih([]); setPeranDipilih([]) }} className="px-5 bg-slate-100 rounded-xl font-baloo font-bold text-slate-600">Batal</button>}
                  </div>
             </form>
           </div>

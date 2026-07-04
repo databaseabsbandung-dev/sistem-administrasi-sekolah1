@@ -43,6 +43,12 @@ export default function Sidebar() {
   const [namaInduk, setNamaInduk] = useState('Lembaga / Yayasan Pusat')
   const [logoInduk, setLogoInduk] = useState('')
   const [akses, setAkses] = useState<AksesInfo | null>(null)
+  // Dicek LANGSUNG dari metadata akun Supabase Auth (bukan cuma tanda lokal
+  // 'sesi_guru_login') -- supaya menu diagnostik/sinkronisasi HANYA terlihat
+  // untuk akun yang didaftarkan langsung di Supabase (admin sungguhan),
+  // bukan akun Guru yang dibuat otomatis oleh sistem (walau entah bagaimana
+  // caranya akun Guru itu login).
+  const [isAdminAsli, setIsAdminAsli] = useState(false)
 
   useEffect(() => {
     const si = localStorage.getItem('identitas_induk')
@@ -54,6 +60,11 @@ export default function Sidebar() {
       } catch { /* abaikan */ }
     }
     setAkses(getAksesInfo())
+
+    supabase.auth.getSession().then(({ data }) => {
+      const role = (data.session?.user?.user_metadata as any)?.role
+      setIsAdminAsli(!!data.session && role !== 'guru')
+    })
   }, [pathname])
 
   const handleLogout = async () => {
@@ -63,6 +74,7 @@ export default function Sidebar() {
   }
 
   const bisaLihat = (moduleId: string | null) => {
+    if (moduleId === 'diagnostik') return isAdminAsli
     if (moduleId === null) return true
     if (!akses) return false // masih memuat -> sembunyikan dulu supaya tidak flicker
     if (!akses.isGuru) return true // Admin: semua modul terlihat

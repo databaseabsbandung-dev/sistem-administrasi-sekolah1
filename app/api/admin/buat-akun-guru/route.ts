@@ -126,3 +126,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: String(e?.message || e) }, { status: 500 })
   }
 }
+
+/**
+ * GET /api/admin/buat-akun-guru
+ * Dipakai HANYA oleh halaman /status-sinkronisasi untuk mengecek apakah
+ * SUPABASE_SERVICE_ROLE_KEY sudah diisi di server -- TIDAK membocorkan isi
+ * key-nya sama sekali, cuma bilang ada/tidak ada.
+ */
+export async function GET(request: NextRequest) {
+  const authHeader = request.headers.get('authorization') || ''
+  const token = authHeader.replace('Bearer ', '').trim()
+  if (!token) {
+    return NextResponse.json({ error: 'Sesi tidak ditemukan.' }, { status: 401 })
+  }
+  const supabaseSebagaiPemanggil = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  const { data: dataUser, error: errorUser } = await supabaseSebagaiPemanggil.auth.getUser(token)
+  if (errorUser || !dataUser?.user) {
+    return NextResponse.json({ error: 'Sesi tidak valid.' }, { status: 401 })
+  }
+  const adaServiceRoleKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY
+  return NextResponse.json({ ok: true, adaServiceRoleKey })
+}
