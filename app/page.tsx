@@ -67,7 +67,18 @@ export default function LoginPage() {
       };
 
       const inputNamaBersih = bersihkanNama(identity);
-      const guruKetemu = daftarGuru.find((g: any) => bersihkanNama(g.nama) === inputNamaBersih);
+      const inputRapiUntukAkun = identity.trim().toLowerCase().replace(/\s+/g, '');
+      const guruKetemu = daftarGuru.find((g: any) => {
+        // Cara 1: cocok dengan nama murni (mis. "nurulfitri")
+        if (bersihkanNama(g.nama) === inputNamaBersih) return true;
+        // Cara 2: cocok persis dengan Nama Akun di tabel "Lihat & Unduh Data
+        // Akun Guru" (mis. "nurulfitri485" -- termasuk angka pembeda kalau
+        // ada nama yang mirip). Banyak guru salah ketik ini karena memang
+        // itu yang tertulis jelas di tabel kredensial.
+        const namaAkunEmail = (g.email || '').split('@')[0]?.toLowerCase();
+        if (namaAkunEmail && namaAkunEmail === inputRapiUntukAkun) return true;
+        return false;
+      });
 
       if (!guruKetemu) {
         setMessage("Nama tidak terdaftar sebagai guru/kontributor di sistem sekolah.");
@@ -127,7 +138,7 @@ export default function LoginPage() {
                />
             </div>
             <p className="text-[9px] text-slate-400 mt-1 pl-1 leading-relaxed">
-               * Guru: Ketik nama murni tanpa gelar/spasi (misal: <i>nurulfitri</i>) sesuai data master.
+               * Guru: ketik nama murni tanpa gelar/spasi (misal: <i>nurulfitri</i>), <strong>atau</strong> nama akun persis seperti tertulis di tabel &quot;Lihat &amp; Unduh Data Akun Guru&quot; (misal: <i>nurulfitri485</i>).
             </p>
           </div>
           
