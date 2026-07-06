@@ -802,7 +802,7 @@ async function eksporPromesPDF(params: {
   doc.setFont('times', 'bold'); doc.setFontSize(8); doc.setTextColor(15, 23, 42)
   doc.text(`Jumlah Jam Efektif       : ${capJpEfektif} JP`, mL, afterTableY); afterTableY += 5
   doc.text(`Jumlah Jam Cadangan    : ${jpCadangan} JP`, mL, afterTableY); afterTableY += 5
-  doc.setTextColor(30, 58, 138)
+  doc.setTextColor(106, 25, 125)
   doc.text(`Jumlah Jam Total Semester ${semLabel} : ${capJpEfektif} JP`, mL, afterTableY); afterTableY += 8
 
   if (afterTableY + 50 > pageH) { doc.addPage(); afterTableY = 15 }

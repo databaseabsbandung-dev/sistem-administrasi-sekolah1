@@ -245,11 +245,11 @@ export async function POST(request: NextRequest) {
           }
 
           cumJp += a.alokasiJp || 0
-          drawCell(String(i + 1), COL.no, { align: 'center', bold: true, color: '#8A2FA0' })
+          drawCell(String(i + 1), COL.no, { align: 'center', bold: true })
           drawCell(a.materi || '-', COL.materi, { bold: true })
           drawCell(a.subMateri || '-', COL.sub, { color: GRAY })
           drawCell(descTP, COL.tp, { color: '#374151' })
-          drawCell(String(a.alokasiJp || 0) + ' JP', COL.jp, { align: 'center', bold: true, color: '#6A197D' })
+          drawCell(String(a.alokasiJp || 0) + ' JP', COL.jp, { align: 'center', bold: true })
           drawCell(String(a.pertemuan || 1) + 'x', COL.ptm, { align: 'center' })
           drawCell(a.referensiMinggu > 0 ? `M${a.referensiMinggu}` : '-', COL.mgg, { align: 'center', color: GRAY })
           drawCell(a.metode || '-', COL.metode, { align: 'center', color: '#92400e' })

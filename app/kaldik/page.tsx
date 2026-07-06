@@ -537,12 +537,13 @@ async function buatDokumenPDF(params: ParamsPDF) {
 
 // ─── Modal Cetak ────────────────────────────────────────────────────────────
 
-function CetakKaldikModal({onClose,namaSekolah,tahunAjaran,daftarAgenda,daftarUnitLembaga,daftarKlasifikasiAgenda,bulanAkademik}:{
+function CetakKaldikModal({onClose,namaSekolah,tahunAjaran,daftarAgenda,daftarUnitLembaga,daftarKlasifikasiAgenda,bulanAkademik,bolehEdit}:{
   onClose:()=>void; namaSekolah:string; tahunAjaran:string
   daftarAgenda:AgendaItem[]
   daftarUnitLembaga:{id:string;label:string}[]
   daftarKlasifikasiAgenda:{id:string;label:string;hexColor:string}[]
   bulanAkademik:{nama:string;jumlahHari:number;mulaiHari:number;tahunBulanIni:number;monthNumber:number;blnIndex:number}[]
+  bolehEdit:boolean
 }) {
   const unitNonPusat=daftarUnitLembaga.filter(u=>u.id!=='lembaga-induk')
   const [scope,setScope]=useState<CetakScope>('keseluruhan')
@@ -639,20 +640,21 @@ function CetakKaldikModal({onClose,namaSekolah,tahunAjaran,daftarAgenda,daftarUn
             </div>
             {/* Identitas */}
             <div className="border border-gray-200 rounded-xl overflow-hidden">
-              <div className="flex justify-between items-center px-4 py-3 bg-gray-50 cursor-pointer" onClick={()=>setEditProfil(v=>!v)}>
+              <div className={`flex justify-between items-center px-4 py-3 bg-gray-50 ${bolehEdit ? 'cursor-pointer' : ''}`} onClick={()=>bolehEdit && setEditProfil(v=>!v)}>
                 <div className="flex items-center gap-2"><Settings className="w-4 h-4 text-gray-500" /><span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Identitas &amp; Tanda Tangan</span>
                   {profilOK?<span className="text-[9px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-bold border border-green-200">Siap ✓</span>:<span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#FFF3C2] text-[#8A6D00] font-bold border border-[#FFE480]">Perlu dilengkapi</span>}
                 </div>
-                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${editProfil?'rotate-180':''}`} />
+                {bolehEdit && <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${editProfil?'rotate-180':''}`} />}
               </div>
-              {!editProfil&&(
+              {(!editProfil||!bolehEdit)&&(
                 <div className="px-4 py-3 border-t border-gray-100 text-[10px] text-gray-600 space-y-1">
                   <p><span className="font-bold text-gray-700">Institusi:</span> {profil.namaSekolah||namaSekolah||'—'}</p>
                   <p><span className="font-bold text-gray-700">Titi Mangsa:</span> {titiMangsaFinal}</p>
                   <p><span className="font-bold text-gray-700">{scope==='keseluruhan'?'Mudir':'Kepala Sekolah'}:</span> {namaPenandatangan||'— (belum diisi)'}{nipPenandatangan?` / NIP. ${nipPenandatangan}`:''}</p>
+                  {!bolehEdit && <p className="text-[9px] text-slate-400 italic pt-1">Peran Anda hanya bisa melihat — Titi Mangsa hanya bisa diubah oleh peran dengan izin edit.</p>}
                 </div>
               )}
-              {editProfil&&(
+              {editProfil&&bolehEdit&&(
                 <div className="px-4 py-4 space-y-3 border-t border-gray-100">
                   <p className="text-[10px] text-gray-400">Nama lembaga, Mudir, dan Kepala Sekolah diambil <strong>otomatis</strong> dari menu Identitas Lembaga &amp; Kelola Data Guru — tidak bisa diubah manual di sini. Hanya Titi Mangsa (tanggal surat) yang bisa disesuaikan.</p>
                   <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1 text-[11px]">
@@ -988,14 +990,18 @@ export default function KaldikPage() {
           </div>
           <div className="flex items-center gap-2">
             <button onClick={()=>setShowCetakModal(true)} className="flex items-center gap-2 bg-[#F5EDF7] border border-[#D9BFE0] text-[#551566] px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#EDE0F0]"><Printer className="w-4 h-4"/> Cetak Kaldik</button>
+            {bolehEdit && (
             <button onClick={()=>googleAccessToken?fetchHolidaysFromGoogle(googleAccessToken):loginGoogle()} disabled={loadingHoliday} className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-100 disabled:opacity-50">
               <Download className={`w-4 h-4 ${loadingHoliday?'animate-bounce':''}`}/>{loadingHoliday?'Mengambil…':googleAccessToken?'Refresh Hari Libur':'Impor Hari Libur Google'}
             </button>
+            )}
             <button onClick={handleBukaModalSinkron} className="flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-600 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-100"><RefreshCw className="w-4 h-4"/> Ekspor ke Google Calendar</button>
           </div>
         </header>
 
         <section className="p-8 max-w-6xl mx-auto w-full space-y-8">
+          {bolehEdit && (
+          <>
           {/* Klasifikasi */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-8 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
             <div className="md:col-span-3">
@@ -1119,6 +1125,8 @@ export default function KaldikPage() {
               <div className="border-t border-gray-100 pt-4 mt-4"><p className="text-xs text-gray-400">Tersimpan otomatis di perangkat ini.</p></div>
             </div>
           </div>
+          </>
+          )}
 
           {/* Visualisasi Kalender */}
           <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-6">
@@ -1169,7 +1177,7 @@ export default function KaldikPage() {
         </section>
       </div>
 
-      {showCetakModal&&<CetakKaldikModal onClose={()=>setShowCetakModal(false)} namaSekolah={namaSekolah} tahunAjaran={tahunAjaran} daftarAgenda={daftarAgenda} daftarUnitLembaga={daftarUnitLembaga} daftarKlasifikasiAgenda={daftarKlasifikasiAgenda} bulanAkademik={bulanAkademik}/>}
+      {showCetakModal&&<CetakKaldikModal onClose={()=>setShowCetakModal(false)} namaSekolah={namaSekolah} tahunAjaran={tahunAjaran} daftarAgenda={daftarAgenda} daftarUnitLembaga={daftarUnitLembaga} daftarKlasifikasiAgenda={daftarKlasifikasiAgenda} bulanAkademik={bulanAkademik} bolehEdit={bolehEdit}/>}
 
       {showModalImport&&(
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">

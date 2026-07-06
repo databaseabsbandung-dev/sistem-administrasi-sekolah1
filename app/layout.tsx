@@ -23,7 +23,7 @@ const openSans = Open_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "E-Rapor",
+  title: "Sistem Administrasi Sekolah",
   description: "Sistem Administrasi Sekolah",
 };
 
