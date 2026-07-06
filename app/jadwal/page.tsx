@@ -1,5 +1,7 @@
 'use client'
 import { useAksesGuard } from '@/lib/useAksesGuard'
+import { bisaMengeditModul } from '@/lib/aksesPeran'
+import CatatanHanyaLihat from '@/components/CatatanHanyaLihat'
 
 import Sidebar from '@/components/Sidebar'
 import { useEffect, useState, useRef } from 'react'
@@ -267,10 +269,10 @@ function generatePrintHtml(p: {
 
   // === Header kolom: Hari -> Rombel ===
   const thHari = hariList.map(h =>
-    `<th colspan="${rombelFiltered.length}" style="padding:4px 2px;font-size:9px;text-align:center;background:#1e1b4b;color:#fff;border:1px solid #3730a3">${h.toUpperCase()}</th>`
+    `<th colspan="${rombelFiltered.length}" style="padding:4px 2px;font-size:9px;text-align:center;background:#6A197D;color:#fff;border:1px solid #450F52">${h.toUpperCase()}</th>`
   ).join('')
   const thRombel = hariList.map(() =>
-    rombelFiltered.map((r: any) => `<th style="padding:3px 2px;font-size:8px;text-align:center;background:#312e81;color:#c7d2fe;border:1px solid #4338ca">${r.nama}</th>`).join('')
+    rombelFiltered.map((r: any) => `<th style="padding:3px 2px;font-size:8px;text-align:center;background:#450F52;color:#F0DFF5;border:1px solid #8A2FA0">${r.nama}</th>`).join('')
   ).join('')
 
   let istirahatIdx = 0
@@ -363,15 +365,15 @@ function generatePrintHtml(p: {
   const guruTableHtml = `
       <table style="flex:1;border-collapse:collapse;width:50%">
         <thead><tr>
-          <th style="padding:4px 6px;font-size:8px;background:#1e1b4b;color:#fff;border:1px solid #3730a3;text-align:left">NAMA PENGAJAR</th>
-          <th style="padding:4px 6px;font-size:8px;background:#1e1b4b;color:#fff;border:1px solid #3730a3;text-align:left">MATA PELAJARAN (KELAS)</th>
+          <th style="padding:4px 6px;font-size:8px;background:#6A197D;color:#fff;border:1px solid #450F52;text-align:left">NAMA PENGAJAR</th>
+          <th style="padding:4px 6px;font-size:8px;background:#6A197D;color:#fff;border:1px solid #450F52;text-align:left">MATA PELAJARAN (KELAS)</th>
         </tr></thead>
         <tbody>${renderGuruRows(colKiri)}</tbody>
       </table>
       <table style="flex:1;border-collapse:collapse;width:50%">
         <thead><tr>
-          <th style="padding:4px 6px;font-size:8px;background:#1e1b4b;color:#fff;border:1px solid #3730a3;text-align:left">NAMA PENGAJAR</th>
-          <th style="padding:4px 6px;font-size:8px;background:#1e1b4b;color:#fff;border:1px solid #3730a3;text-align:left">MATA PELAJARAN (KELAS)</th>
+          <th style="padding:4px 6px;font-size:8px;background:#6A197D;color:#fff;border:1px solid #450F52;text-align:left">NAMA PENGAJAR</th>
+          <th style="padding:4px 6px;font-size:8px;background:#6A197D;color:#fff;border:1px solid #450F52;text-align:left">MATA PELAJARAN (KELAS)</th>
         </tr></thead>
         <tbody>${renderGuruRows(colKanan)}</tbody>
       </table>`
@@ -380,7 +382,7 @@ function generatePrintHtml(p: {
   const piketHtml = `
       <table style="border-collapse:collapse;width:100%">
         <thead><tr>
-          ${LIST_HARI.slice(0, 5).map(h => `<th style="padding:3px 5px;font-size:7.5px;background:#1e1b4b;color:#fff;border:1px solid #3730a3">${h}</th>`).join('')}
+          ${LIST_HARI.slice(0, 5).map(h => `<th style="padding:3px 5px;font-size:7.5px;background:#6A197D;color:#fff;border:1px solid #450F52">${h}</th>`).join('')}
         </tr></thead>
         <tbody><tr>
           ${LIST_HARI.slice(0, 5).map(h => {
@@ -393,7 +395,7 @@ function generatePrintHtml(p: {
 
   // === Keterangan tambahan (kolom kanan, sejajar dengan Jadwal Piket Guru) ===
   const keteranganHtml = keterangan && keterangan.trim() ? `
-      <p style="font-size:8.5px;font-weight:900;color:#1e1b4b;margin-bottom:4px">Keterangan:</p>
+      <p style="font-size:8.5px;font-weight:900;color:#6A197D;margin-bottom:4px">Keterangan:</p>
       <div style="font-size:8px;color:#374151;line-height:1.55;white-space:pre-line">${keterangan
         .split('\n')
         .filter(line => line.trim() !== '')
@@ -436,16 +438,16 @@ function generatePrintHtml(p: {
 <title>Jadwal Pelajaran - ${namaUnitTampil}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; font-size: 9px; background: #fff; color:#111; }
-  .header { display: flex; align-items: center; gap: 14px; border-bottom: 3px solid #1e1b4b; padding-bottom: 8px; margin-bottom: 8px; width: 100%; }
+  body { font-family: 'Times New Roman', Times, serif; font-size: 9px; background: #fff; color:#111; }
+  .header { display: flex; align-items: center; gap: 14px; border-bottom: 3px solid #6A197D; padding-bottom: 8px; margin-bottom: 8px; width: 100%; }
   .header img { width: 56px; height: 56px; object-fit: contain; flex-shrink: 0; }
   .header-logo-slot { width: 56px; height: 56px; flex-shrink: 0; }
   .header-text { flex: 1; text-align: center; }
-  .header-text h1 { font-size: 11px; font-weight: 900; text-transform: uppercase; color: #1e1b4b; line-height: 1.35; white-space: pre-line; }
-  .header-text h2 { font-size: 12px; font-weight: 900; color: #1e1b4b; margin-top: 2px; text-transform:uppercase; }
+  .header-text h1 { font-size: 11px; font-weight: 900; text-transform: uppercase; color: #6A197D; line-height: 1.35; white-space: pre-line; }
+  .header-text h2 { font-size: 12px; font-weight: 900; color: #6A197D; margin-top: 2px; text-transform:uppercase; }
   .header-text p { font-size: 9px; color: #374151; margin-top: 1px; }
-  .meta-row { display:flex; justify-content:space-between; font-size:9px; font-weight:700; color:#1e1b4b; margin-bottom:6px; }
-  .judul-jadwal { text-align:center; font-size:11px; font-weight:900; color:#1e1b4b; text-transform:uppercase; margin: 6px 0 8px; }
+  .meta-row { display:flex; justify-content:space-between; font-size:9px; font-weight:700; color:#6A197D; margin-bottom:6px; }
+  .judul-jadwal { text-align:center; font-size:11px; font-weight:900; color:#6A197D; text-transform:uppercase; margin: 6px 0 8px; }
   table { border-collapse: collapse; width: 100%; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } @page { size: A4 landscape; margin: 10mm; } }
 </style>
@@ -471,7 +473,7 @@ function generatePrintHtml(p: {
   <table style="width:100%;table-layout:fixed">
     <thead>
       <tr>
-        <th rowspan="2" style="padding:4px;font-size:9px;background:#1e1b4b;color:#fff;border:1px solid #3730a3;width:62px">WAKTU</th>
+        <th rowspan="2" style="padding:4px;font-size:9px;background:#6A197D;color:#fff;border:1px solid #450F52;width:62px">WAKTU</th>
         ${thHari}
       </tr>
       <tr>${thRombel}</tr>
@@ -490,7 +492,7 @@ function generatePrintHtml(p: {
   <!-- Baris 2: Jadwal Piket Guru (kiri, sempit) + Keterangan (kanan, mengisi sisa lebar) -->
   <div style="display:flex;gap:16px;margin-top:10px;align-items:flex-start">
     <div style="width:42%">
-      <div style="font-size:8px;font-weight:700;color:#1e1b4b;margin-bottom:4px">JADWAL PIKET GURU</div>
+      <div style="font-size:8px;font-weight:700;color:#6A197D;margin-bottom:4px">JADWAL PIKET GURU</div>
       ${piketHtml}
     </div>
     <div style="flex:1">
@@ -532,7 +534,7 @@ function generatePrintHtmlGuru(p: {
   const infoKiri = `
     <div>
       <p style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Nama Guru</p>
-      <p style="font-size:17px;font-weight:900;color:#1e1b4b;margin-bottom:6px">${guru.nama}</p>
+      <p style="font-size:17px;font-weight:900;color:#6A197D;margin-bottom:6px">${guru.nama}</p>
       ${guru.nip ? `<p style="font-size:13px;font-weight:600;color:#374151">NIP/NUPTK: ${guru.nip}</p>` : ''}
       <p style="font-size:13px;font-weight:600;color:#374151;margin-top:2px">Total Mengajar: <strong>${totalJp} JP / minggu</strong></p>
     </div>`
@@ -540,12 +542,12 @@ function generatePrintHtmlGuru(p: {
   const infoKanan = `
     <div style="text-align:right">
       <p style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Mata Pelajaran</p>
-      ${mapelDiampu.map((m: any) => `<p style="font-size:14px;font-weight:700;color:#1e1b4b;line-height:1.5">${m.nama}</p>`).join('')}
+      ${mapelDiampu.map((m: any) => `<p style="font-size:14px;font-weight:700;color:#6A197D;line-height:1.5">${m.nama}</p>`).join('')}
     </div>`
 
   // ── Tabel jadwal utama ─────────────────────────────────────────────────────
   const thHari = LIST_HARI.map(h =>
-    `<th style="padding:8px 6px;font-size:14px;font-weight:900;background:#1e1b4b;color:#fff;border:1px solid #312e81;text-align:center;vertical-align:middle">${h}</th>`
+    `<th style="padding:8px 6px;font-size:14px;font-weight:900;background:#6A197D;color:#fff;border:1px solid #450F52;text-align:center;vertical-align:middle">${h}</th>`
   ).join('')
 
   const rowsHtml = allSlots.map(slot => {
@@ -565,7 +567,7 @@ function generatePrintHtmlGuru(p: {
       const rombel = daftarRombel.find((r: any) => r.id === j.rombelId)
       const mapel = daftarMapel.find((m: any) => m.id === j.mapelId)
       return `<td style="padding:8px 6px;border:1px solid #d1d5db;text-align:center;vertical-align:middle;background:#eef2ff;min-width:80px">
-        <span style="font-size:14px;font-weight:900;display:block;line-height:1.3;color:#1e1b4b">${rombel?.nama || '-'}</span>
+        <span style="font-size:14px;font-weight:900;display:block;line-height:1.3;color:#6A197D">${rombel?.nama || '-'}</span>
         <span style="font-size:12px;font-weight:600;display:block;line-height:1.35;margin-top:3px;white-space:normal;word-break:break-word;color:#374151">${mapel?.nama || '-'}</span>
       </td>`
     }).join('')
@@ -597,7 +599,7 @@ function generatePrintHtmlGuru(p: {
   // ── Keterangan ─────────────────────────────────────────────────────────────
   const keteranganHtml = keterangan && keterangan.trim() ? `
     <div style="margin-top:14px;padding:9px 12px;border:1px solid #cbd5e1;border-radius:6px;background:#f8fafc">
-      <p style="font-size:14px;font-weight:900;color:#1e1b4b;margin-bottom:5px">Keterangan:</p>
+      <p style="font-size:14px;font-weight:900;color:#6A197D;margin-bottom:5px">Keterangan:</p>
       <div style="font-size:13px;color:#374151;line-height:1.6;white-space:pre-line">${keterangan
         .split('\n').filter(l => l.trim()).map((l, i) => `${i + 1}. ${l.replace(/^\d+\.\s*/, '')}`).join('\n')}</div>
     </div>` : ''
@@ -609,11 +611,11 @@ function generatePrintHtmlGuru(p: {
 <title>Jadwal Guru - ${guru.nama}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; font-size: 14px; background:#fff; color:#111; }
+  body { font-family: 'Times New Roman', Times, serif; font-size: 14px; background:#fff; color:#111; }
   table { border-collapse: collapse; width:100%; table-layout:fixed; }
   td, th { vertical-align: middle; word-break: break-word; }
   .page-wrap { padding: 14mm 14mm 10mm 14mm; }
-  .judul { text-align:center; font-size:20px; font-weight:900; color:#1e1b4b; text-transform:uppercase; padding-bottom:8px; border-bottom:3px solid #1e1b4b; margin-bottom:12px; }
+  .judul { text-align:center; font-size:20px; font-weight:900; color:#6A197D; text-transform:uppercase; padding-bottom:8px; border-bottom:3px solid #6A197D; margin-bottom:12px; }
   .kop-row { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; gap:16px; }
   .tabel-jadwal-guru th:first-child,
   .tabel-jadwal-guru td:first-child { width:70px; }
@@ -635,7 +637,7 @@ function generatePrintHtmlGuru(p: {
   <table class="tabel-jadwal-guru" style="margin-bottom:14px">
     <thead>
       <tr>
-        <th style="padding:8px 4px;font-size:13px;font-weight:900;background:#1e1b4b;color:#fff;border:1px solid #312e81;text-align:center">Jam</th>
+        <th style="padding:8px 4px;font-size:13px;font-weight:900;background:#6A197D;color:#fff;border:1px solid #450F52;text-align:center">Jam</th>
         ${thHari}
       </tr>
     </thead>
@@ -643,11 +645,11 @@ function generatePrintHtmlGuru(p: {
   </table>
 
   <div style="margin-bottom:12px">
-    ${piketLabel ? `<p style="font-size:14px;font-weight:700;color:#1e1b4b;margin-bottom:6px">${piketLabel}</p>` : ''}
+    ${piketLabel ? `<p style="font-size:14px;font-weight:700;color:#6A197D;margin-bottom:6px">${piketLabel}</p>` : ''}
     <p style="font-size:13px;color:#374151;margin-bottom:6px">Apabila bapak/ibu berhalangan hadir, dapat menghubungi guru piket berikut:</p>
     <table style="table-layout:fixed">
       <thead>
-        <tr>${hariPiketKolom.map(h => `<th style="padding:7px 6px;font-size:13px;font-weight:800;background:#1e1b4b;color:#fff;border:1px solid #312e81;text-align:center">${h}</th>`).join('')}</tr>
+        <tr>${hariPiketKolom.map(h => `<th style="padding:7px 6px;font-size:13px;font-weight:800;background:#6A197D;color:#fff;border:1px solid #450F52;text-align:center">${h}</th>`).join('')}</tr>
       </thead>
       <tbody>${piketTableRows}</tbody>
     </table>
@@ -666,6 +668,7 @@ export default function JadwalPelajaranPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const diizinkanAkses = useAksesGuard('jadwal')
+  const bolehEdit = bisaMengeditModul('jadwal')
 
   // --- Identitas (dibaca dari halaman Identitas Lembaga & Dashboard) ---
   const [identitasInduk, setIdentitasInduk] = useState<any>({ nama: 'Lembaga / Yayasan Pusat', npsn: '', logo_utama: '', logo: '', kop: '', alamat: '', logoKiriSumber: 'pusat', logoKananSumber: 'pusat' })
@@ -1953,6 +1956,8 @@ export default function JadwalPelajaranPage() {
           </button>
         </header>
 
+        {bolehEdit ? (
+        <>
         {/* KONTROL */}
         <section className="bg-[#F7ECFA]/50 border border-[#F0DFF5] p-6 rounded-2xl grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
           <div>
@@ -3168,6 +3173,10 @@ export default function JadwalPelajaranPage() {
               })}
             </div>
           </section>
+        )}
+        </>
+        ) : (
+          <CatatanHanyaLihat pesan="Anda tidak diberi izin untuk mengubah Jadwal Pelajaran. Gunakan tombol 'Unduh / Cetak Jadwal' di kanan atas untuk melihat/mengunduh jadwal yang sudah ada." />
         )}
 
       </main>

@@ -4,11 +4,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation"; 
 import { supabase } from "./supabase";
 import { refreshSetelahLogin } from "@/lib/cloudSync";
-import { Landmark, User, Lock, ArrowRight } from "lucide-react";
+import { Landmark, User, Lock, ArrowRight, Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
   const [identity, setIdentity] = useState(""); 
   const [password, setPassword] = useState("");
+  const [tampilkanSandi, setTampilkanSandi] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   
@@ -147,13 +148,22 @@ export default function LoginPage() {
             <div className="relative">
                <Lock className="w-5 h-5 absolute left-3 top-3.5 text-slate-400" />
                <input 
-                 type="password" 
+                 type={tampilkanSandi ? "text" : "password"} 
                  value={password}
                  onChange={(e) => setPassword(e.target.value)}
-                 className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#8A2FA0] font-semibold text-slate-700" 
+                 className="w-full pl-11 pr-11 py-3 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#8A2FA0] font-semibold text-slate-700" 
                  placeholder="Kata sandi / NPSN sekolah"
                  required
                />
+               <button
+                 type="button"
+                 onClick={() => setTampilkanSandi(v => !v)}
+                 className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 transition"
+                 tabIndex={-1}
+                 aria-label={tampilkanSandi ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"}
+               >
+                 {tampilkanSandi ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+               </button>
             </div>
           </div>
 

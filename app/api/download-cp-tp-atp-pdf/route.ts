@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
           const boxH = 16 + Math.ceil(c.deskripsi.length / 95) * 11 + (c.elemen ? 14 : 0) + 6
 
           // CP header strip
-          rect(L, y, W, 16, '#dbeafe', BORDER)
+          rect(L, y, W, 16, '#F0DFF5', BORDER)
           txt(`CP ${i + 1}`, L + 6, y + 3, { bold: true, size: 8, color: PRIMARY, w: 30 })
           txt(`Fase ${c.fase}  |  Kelas ${c.kelas}`, L + 40, y + 3, { size: 7.5, color: ACCENT, w: 120 })
           if (c.elemen) txt(`Elemen: ${c.elemen}`, L + 180, y + 3, { size: 7.5, color: VIOLET, w: W - 190 })
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
 
       // ── BAGIAN B: TUJUAN PEMBELAJARAN ───────────────────
       pageCheck(30)
-      rect(L, y, W, 18, '#1d4ed8')
+      rect(L, y, W, 18, '#6A197D')
       txt('B. TUJUAN PEMBELAJARAN (TP)', L + 8, y + 4, { bold: true, size: 8.5, color: 'white', w: W - 16 })
       y += 22
 
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
           if (!cpRef) return
 
           pageCheck(30)
-          rect(L, y, W, 14, '#eff6ff', BORDER)
+          rect(L, y, W, 14, '#F7ECFA', BORDER)
           txt(`CP Rujukan: ${cpRef.deskripsi.slice(0, 90)}${cpRef.deskripsi.length > 90 ? '...' : ''}`,
             L + 6, y + 3, { size: 7, color: PRIMARY, w: W - 12 })
           y += 14
@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
             rect(L, y, W, rowH, bg, BORDER)
 
             // Nomor lingkaran
-            rect(L + 6, y + 5, 16, 16, '#1d4ed8')
+            rect(L + 6, y + 5, 16, 16, '#6A197D')
             txt(String(ti + 1), L + 6, y + 8, { bold: true, size: 7.5, color: 'white', w: 16, align: 'center' })
 
             txt(t.deskripsi, L + 28, y + 5, { size: 7.5, color: DARK, w: W - 36, wrap: true })
@@ -179,15 +179,15 @@ export async function POST(request: NextRequest) {
       y = 45
 
       // Sub-header ATP
-      rect(L, y, W, 70, '#1e1b4b')
+      rect(L, y, W, 70, '#6A197D')
       txt('C. ALUR TUJUAN PEMBELAJARAN (ATP)', L + 10, y + 8, { bold: true, size: 11, color: 'white', w: W - 20, align: 'center' })
       txt(`${namaMapel}  ·  Kelas ${kelas}  ·  Semester ${semester === '1' ? 'Ganjil' : 'Genap'}  ·  TA ${tahunAjaran || '-'}`,
-        L + 10, y + 24, { size: 8, color: '#a5b4fc', w: W - 20, align: 'center' })
+        L + 10, y + 24, { size: 8, color: '#E3C2ED', w: W - 20, align: 'center' })
       txt(`Guru Pengampu: ${namaGuru || '-'}  ·  ${namaSekolah || '-'}`,
-        L + 10, y + 36, { size: 7.5, color: '#c7d2fe', w: W - 20, align: 'center' })
+        L + 10, y + 36, { size: 7.5, color: '#F0DFF5', w: W - 20, align: 'center' })
       const totalJp = (atp || []).reduce((s: number, a: any) => s + (a.alokasiJp || 0), 0)
       txt(`Total JP: ${totalJp} JP  ·  Total Item: ${(atp || []).length}`,
-        L + 10, y + 50, { bold: true, size: 8, color: '#c7d2fe', w: W - 20, align: 'center' })
+        L + 10, y + 50, { bold: true, size: 8, color: '#F0DFF5', w: W - 20, align: 'center' })
       y += 80
 
       if (!atp || atp.length === 0) {
@@ -202,7 +202,7 @@ export async function POST(request: NextRequest) {
         const totalW = Object.values(COL).reduce((a, b) => a + b, 0)
 
         const drawTableHeader = () => {
-          rect(L, y, W, 20, '#1e1b4b')
+          rect(L, y, W, 20, '#6A197D')
           let cx = L
           const headers = [
             ['No', COL.no, 'center'],
@@ -245,11 +245,11 @@ export async function POST(request: NextRequest) {
           }
 
           cumJp += a.alokasiJp || 0
-          drawCell(String(i + 1), COL.no, { align: 'center', bold: true, color: '#4338ca' })
+          drawCell(String(i + 1), COL.no, { align: 'center', bold: true, color: '#8A2FA0' })
           drawCell(a.materi || '-', COL.materi, { bold: true })
           drawCell(a.subMateri || '-', COL.sub, { color: GRAY })
           drawCell(descTP, COL.tp, { color: '#374151' })
-          drawCell(String(a.alokasiJp || 0) + ' JP', COL.jp, { align: 'center', bold: true, color: '#1d4ed8' })
+          drawCell(String(a.alokasiJp || 0) + ' JP', COL.jp, { align: 'center', bold: true, color: '#6A197D' })
           drawCell(String(a.pertemuan || 1) + 'x', COL.ptm, { align: 'center' })
           drawCell(a.referensiMinggu > 0 ? `M${a.referensiMinggu}` : '-', COL.mgg, { align: 'center', color: GRAY })
           drawCell(a.metode || '-', COL.metode, { align: 'center', color: '#92400e' })
