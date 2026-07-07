@@ -703,6 +703,14 @@ export default function JadwalPelajaranPage() {
 
   // --- UI State ---
   const [tabView, setTabView] = useState<'waktu' | 'pengaturan_kelas' | 'input' | 'rekap_guru' | 'rekap_jadwal'>('input')
+
+  useEffect(() => {
+    // Akses lihat-saja tidak boleh berada di tab yang berisi form isian
+    // (Master Waktu / Pengaturan / Plot Matriks) -- paksa ke Rekap Jadwal.
+    if (!bolehEdit && (tabView === 'waktu' || tabView === 'pengaturan_kelas' || tabView === 'input')) {
+      setTabView('rekap_jadwal')
+    }
+  }, [bolehEdit, tabView])
   const [subTabKelas, setSubTabKelas] = useState<'identitas' | 'gabungan' | 'giliran' | 'tetap' | 'larangan' | 'titimangsa'>('identitas')
   const [hariPlotTabel, setHariPlotTabel] = useState('Senin')
   const [editingCell, setEditingCell] = useState<string | null>(null)
@@ -1956,8 +1964,6 @@ export default function JadwalPelajaranPage() {
           </button>
         </header>
 
-        {bolehEdit ? (
-        <>
         {/* KONTROL */}
         <section className="bg-[#F7ECFA]/50 border border-[#F0DFF5] p-6 rounded-2xl grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
           <div>
@@ -1978,7 +1984,11 @@ export default function JadwalPelajaranPage() {
           )}
           <div>
             <label className="text-[10px] font-extrabold text-[#330B40] uppercase tracking-wider mb-1.5 block">Maks. JP / Hari (per Pendidik)</label>
-            <input type="number" min={1} value={maksJpGuruPerHari} onChange={e => { const v = Number(e.target.value) || 1; setMaksJpGuruPerHari(v); save('master_maks_jp_guru_per_hari', v) }} className="w-full px-4 py-2.5 border border-[#E3C2ED] rounded-xl text-xs bg-white font-bold outline-none focus:ring-2 focus:ring-[#8A2FA0]" />
+            {bolehEdit ? (
+              <input type="number" min={1} value={maksJpGuruPerHari} onChange={e => { const v = Number(e.target.value) || 1; setMaksJpGuruPerHari(v); save('master_maks_jp_guru_per_hari', v) }} className="w-full px-4 py-2.5 border border-[#E3C2ED] rounded-xl text-xs bg-white font-bold outline-none focus:ring-2 focus:ring-[#8A2FA0]" />
+            ) : (
+              <p className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-xs bg-slate-50 font-bold text-slate-500">{maksJpGuruPerHari} JP/hari</p>
+            )}
           </div>
 
           {/* TAB NAV */}
@@ -1989,7 +1999,9 @@ export default function JadwalPelajaranPage() {
               ['input', '3. Plot Matriks'],
               ['rekap_guru', '4. Rekap Guru'],
               ['rekap_jadwal', '5. Rekap Jadwal'],
-            ] as [typeof tabView, string][]).map(([key, label]) => (
+            ] as [typeof tabView, string][])
+              .filter(([key]) => bolehEdit || key === 'rekap_guru' || key === 'rekap_jadwal')
+              .map(([key, label]) => (
               <button key={key} onClick={() => setTabView(key)} className={`flex-1 py-2 text-center text-xs font-bold rounded-lg transition ${tabView === key ? 'bg-[#6A197D] text-white shadow' : 'text-slate-600 hover:bg-slate-50'}`}>{label}</button>
             ))}
           </div>
@@ -1998,7 +2010,7 @@ export default function JadwalPelajaranPage() {
         {/* =========================================================
             TAB 1: MASTER WAKTU
         ========================================================= */}
-        {tabView === 'waktu' && (
+        {bolehEdit && tabView === 'waktu' && (
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <form onSubmit={handleSimpanWaktu} className="space-y-4 xl:col-span-1 border-r border-slate-100 pr-6">
               <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
@@ -2063,7 +2075,7 @@ export default function JadwalPelajaranPage() {
         {/* =========================================================
             TAB 2: PENGATURAN KELAS (Gabungan, Giliran, Tetap, Titimangsa)
         ========================================================= */}
-        {tabView === 'pengaturan_kelas' && (
+        {bolehEdit && tabView === 'pengaturan_kelas' && (
           <div className="space-y-6">
             {/* Sub-tab */}
             <div className="flex bg-white rounded-xl border border-slate-200 p-1.5 gap-1 w-fit flex-wrap">
@@ -2692,7 +2704,7 @@ export default function JadwalPelajaranPage() {
         {/* =========================================================
             TAB 3: PLOT MATRIKS
         ========================================================= */}
-        {tabView === 'input' && (
+        {bolehEdit && tabView === 'input' && (
           <div className="space-y-8">
 
             {/* MATRIKS ALOKASI JP */}
@@ -3001,7 +3013,7 @@ export default function JadwalPelajaranPage() {
             <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-3 flex-wrap">
               <div className="flex items-center gap-2">
                 <Shield className="w-5 h-5 text-[#6A197D]" />
-                <h2 className="font-bold text-slate-800 text-sm">Rekapitulasi Beban Jam Mengajar Pendidik</h2>
+                <h2 className="font-bold text-slate-800 text-sm">{bolehEdit ? 'Rekapitulasi Beban Jam Mengajar Pendidik' : 'Unduh Jadwal Per Pendidik'}</h2>
               </div>
               <button
                 onClick={() => { setGuruDownloadTarget('semua-zip'); setShowDownloadGuruModal(true) }}
@@ -3021,9 +3033,9 @@ export default function JadwalPelajaranPage() {
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold">
                     <th className="p-4">Pendidik</th>
-                    <th className="p-4">Mapel Diampu</th>
-                    <th className="p-4 text-center">Total JP</th>
-                    <th className="p-4">JP per Hari</th>
+                    {bolehEdit && <th className="p-4">Mapel Diampu</th>}
+                    {bolehEdit && <th className="p-4 text-center">Total JP</th>}
+                    {bolehEdit && <th className="p-4">JP per Hari</th>}
                     <th className="p-4 text-center">Unduh</th>
                   </tr>
                 </thead>
@@ -3034,14 +3046,19 @@ export default function JadwalPelajaranPage() {
                     return (
                       <tr key={g.id} className="hover:bg-slate-50/70">
                         <td className="p-4 text-sm font-black text-slate-800">{g.nama}</td>
+                        {bolehEdit && (
                         <td className="p-4">
                           <ul className="list-disc pl-3 text-[#571466]">
                             {g.mapelIds?.map((mId: string) => <li key={mId}>{daftarMapel.find(m => m.id === mId)?.nama || mId}</li>)}
                           </ul>
                         </td>
+                        )}
+                        {bolehEdit && (
                         <td className="p-4 text-center">
                           <span className="bg-emerald-50 text-emerald-800 border border-emerald-100 font-black px-4 py-1.5 rounded-xl text-xs">{totalJp} JP</span>
                         </td>
+                        )}
+                        {bolehEdit && (
                         <td className="p-4">
                           <div className="flex flex-wrap gap-1.5">
                             {LIST_HARI.map(h => (
@@ -3051,6 +3068,7 @@ export default function JadwalPelajaranPage() {
                             ))}
                           </div>
                         </td>
+                        )}
                         <td className="p-4 text-center">
                           <button
                             onClick={() => handleDownloadSatuGuru(g)}
@@ -3064,7 +3082,7 @@ export default function JadwalPelajaranPage() {
                       </tr>
                     )
                   })}
-                  {!daftarGuru.length && <tr><td colSpan={5} className="py-12 text-center text-slate-400 text-xs">Belum ada data guru.</td></tr>}
+                  {!daftarGuru.length && <tr><td colSpan={bolehEdit ? 5 : 2} className="py-12 text-center text-slate-400 text-xs">Belum ada data guru.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -3173,10 +3191,6 @@ export default function JadwalPelajaranPage() {
               })}
             </div>
           </section>
-        )}
-        </>
-        ) : (
-          <CatatanHanyaLihat pesan="Anda tidak diberi izin untuk mengubah Jadwal Pelajaran. Gunakan tombol 'Unduh / Cetak Jadwal' di kanan atas untuk melihat/mengunduh jadwal yang sudah ada." />
         )}
 
       </main>

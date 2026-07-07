@@ -1,5 +1,7 @@
 'use client'
 import { useAksesGuard } from '@/lib/useAksesGuard'
+import { bisaMengeditModul } from '@/lib/aksesPeran'
+import CatatanHanyaLihat from '@/components/CatatanHanyaLihat'
 
 import Sidebar from '@/components/Sidebar'
 import { useEffect, useState } from 'react'
@@ -13,6 +15,7 @@ export default function MasterMapelPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const diizinkanAkses = useAksesGuard('guru')
+  const bolehEdit = bisaMengeditModul('guru')
   const [namaInduk, setNamaInduk] = useState('Lembaga / Yayasan Pusat')
   const [logoInduk, setLogoInduk] = useState('')
 
@@ -88,6 +91,7 @@ export default function MasterMapelPage() {
         </header>
         
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-6">
+          {bolehEdit ? (
           <form onSubmit={handleSimpanMapel} className="space-y-4 md:col-span-1 border-r border-slate-100 pr-0 md:pr-4">
              <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Kode Mata Pelajaran</label>
@@ -104,6 +108,11 @@ export default function MasterMapelPage() {
                 {editMapelId && <button type="button" onClick={() => { setEditMapelId(null); setKodeMapel(''); setNamaMapel('') }} className="px-5 bg-slate-100 rounded-xl font-bold text-slate-600 text-xs">Batal</button>}
              </div>
           </form>
+          ) : (
+            <div className="md:col-span-1 border-r border-slate-100 pr-0 md:pr-4">
+              <CatatanHanyaLihat pesan="Anda tidak diberi izin untuk menambah/mengubah mata pelajaran. Daftar di samping tetap bisa dilihat." />
+            </div>
+          )}
 
           <div className="bg-slate-50/50 rounded-xl p-4 md:col-span-2 max-h-[350px] overflow-y-auto border border-slate-100">
              <div className="space-y-2">
@@ -113,10 +122,12 @@ export default function MasterMapelPage() {
                         <span className="bg-[#F7ECFA] text-[#571466] font-black px-2 py-0.5 rounded text-[10px] border border-[#F0DFF5] uppercase tracking-widest">{item.kode}</span>
                         <p className="font-extrabold text-slate-800 mt-1.5">{item.nama}</p>
                      </div>
+                     {bolehEdit && (
                      <div className="flex gap-1">
                         <button onClick={() => handleEditMapelClick(item)} className="p-1 text-slate-400 hover:text-[#6A197D]"><Edit2 className="w-3.5 h-3.5" /></button>
                         <button onClick={() => handleHapusMapelClick(item.id)} className="p-1 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
                      </div>
+                     )}
                   </div>
                 ))}
                 {daftarMapel.length === 0 && <p className="text-center text-xs text-slate-400 py-12 font-medium">Belum ada master data mapel terdaftar.</p>}

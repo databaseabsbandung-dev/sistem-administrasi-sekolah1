@@ -28,6 +28,7 @@ const MENU_ITEMS: MenuItem[] = [
   { moduleId: 'lembaga',        href: '/lembaga',        label: 'Identitas Lembaga',    icon: Building },
   { moduleId: 'peran',          href: '/peran',          label: 'Pembagian Peran',      icon: Shield },
   { moduleId: 'guru',           href: '/peran/guru',     label: 'Kelola Data Guru',     icon: UserPlus },
+  { moduleId: 'guru',           href: '/peran/mapel',    label: 'Mata Pelajaran',       icon: BookOpen },
   { moduleId: 'kaldik',         href: '/kaldik',         label: 'Kalender Pendidikan',  icon: CalendarDays, sectionBefore: 'Modul Administrasi' },
   { moduleId: 'jadwal',         href: '/jadwal',         label: 'Jadwal Pelajaran',     icon: Clock },
   { moduleId: 'minggu_efektif', href: '/minggu-efektif', label: 'Minggu Efektif',       icon: BarChart2 },
