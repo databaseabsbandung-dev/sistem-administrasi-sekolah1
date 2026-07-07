@@ -259,7 +259,7 @@ async function buatDokumenPDF(params: ParamsPDF) {
   const CELL_W=COL_W/7
   const NAVY:[number,number,number]=[106,25,125] // Ungu #6A197D
   const NAVY_LIGHT:[number,number,number]=[237,224,240] // Ungu muda (tint)
-  const DARK:[number,number,number]=[35,18,42] // Hitam bernuansa ungu tua
+  const DARK:[number,number,number]=[0,0,0] // Hitam murni (judul, semester, titimangsa, TTD)
 
   function getDateColor(dateStr:string, uid:string):[number,number,number]|null {
     for(const item of daftarAgenda) {
@@ -281,7 +281,7 @@ async function buatDokumenPDF(params: ParamsPDF) {
     doc.text('KALENDER PENDIDIKAN',PW/2,y+4.5,{align:'center'})
     doc.setFontSize(10.5)
     doc.text(namaInstitusi.toUpperCase(),PW/2,y+10,{align:'center'})
-    doc.setFont('times','normal');doc.setFontSize(8);doc.setTextColor(130,95,140)
+    doc.setFont('times','normal');doc.setFontSize(8);doc.setTextColor(...DARK)
     doc.text(`TAHUN AJARAN ${tahunAjaran}`,PW/2,y+15.5,{align:'center'})
     y+=19
     doc.setLineWidth(0.6);doc.setDrawColor(...NAVY);doc.line(ML,y,PW-MR,y)
@@ -457,7 +457,7 @@ async function buatDokumenPDF(params: ParamsPDF) {
     doc.setLineWidth(0.3);doc.setDrawColor(185,165,190);doc.line(ttX,sy,ttX+70,sy);sy+=5
     doc.setFont('times','bold');doc.setFontSize(9.5)
     doc.text(namaPenandatangan||`(${jabatanPenandatangan})`,ttX,sy)
-    if(nipPenandatangan){sy+=5;doc.setFont('times','normal');doc.setFontSize(8.5);doc.text(`NIP. ${nipPenandatangan}`,ttX,sy)}
+    if(scope!=='keseluruhan'&&nipPenandatangan){sy+=5;doc.setFont('times','normal');doc.setFontSize(8.5);doc.text(`NUPTK. ${nipPenandatangan}`,ttX,sy)}
   }
 
   // ── Susun daftar bulan yang akan dicetak ────────────────────────────────
@@ -508,7 +508,7 @@ async function buatDokumenPDF(params: ParamsPDF) {
       // sendirian nempel di ujung bawah halaman tanpa isi di bawahnya).
       const tinggiBarisPertama=tinggiAgendaPerBaris[baris]
       if(curY+SUBHDR_H+CAL_H+tinggiBarisPertama>BATAS_BAWAH_KONTEN) pindahHalamanBaru()
-      doc.setFont('times','bold');doc.setFontSize(8.5);doc.setTextColor(74,20,89)
+      doc.setFont('times','bold');doc.setFontSize(8.5);doc.setTextColor(...DARK)
       doc.text(sem.label,ML,curY+3.3)
       curY+=SUBHDR_H
     }
@@ -650,7 +650,7 @@ function CetakKaldikModal({onClose,namaSekolah,tahunAjaran,daftarAgenda,daftarUn
                 <div className="px-4 py-3 border-t border-gray-100 text-[10px] text-gray-600 space-y-1">
                   <p><span className="font-bold text-gray-700">Institusi:</span> {profil.namaSekolah||namaSekolah||'—'}</p>
                   <p><span className="font-bold text-gray-700">Titi Mangsa:</span> {titiMangsaFinal}</p>
-                  <p><span className="font-bold text-gray-700">{scope==='keseluruhan'?'Mudir':'Kepala Sekolah'}:</span> {namaPenandatangan||'— (belum diisi)'}{nipPenandatangan?` / NIP. ${nipPenandatangan}`:''}</p>
+                  <p><span className="font-bold text-gray-700">{scope==='keseluruhan'?'Mudir':'Kepala Sekolah'}:</span> {namaPenandatangan||'— (belum diisi)'}{scope!=='keseluruhan'&&nipPenandatangan?` / NUPTK. ${nipPenandatangan}`:''}</p>
                   {!bolehEdit && <p className="text-[9px] text-slate-400 italic pt-1">Peran Anda hanya bisa melihat — Titi Mangsa hanya bisa diubah oleh peran dengan izin edit.</p>}
                 </div>
               )}
@@ -659,8 +659,8 @@ function CetakKaldikModal({onClose,namaSekolah,tahunAjaran,daftarAgenda,daftarUn
                   <p className="text-[10px] text-gray-400">Nama lembaga, Mudir, dan Kepala Sekolah diambil <strong>otomatis</strong> dari menu Identitas Lembaga &amp; Kelola Data Guru — tidak bisa diubah manual di sini. Hanya Titi Mangsa (tanggal surat) yang bisa disesuaikan.</p>
                   <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1 text-[11px]">
                     <p><span className="font-bold text-gray-600">Nama Lembaga:</span> {profil.namaSekolah || namaSekolah || '—'}</p>
-                    <p><span className="font-bold text-gray-600">Mudir:</span> {profil.namaMudir || 'Belum diatur di Kelola Data Guru'}{profil.nipMudir ? ` / NIP. ${profil.nipMudir}` : ''}</p>
-                    <p><span className="font-bold text-gray-600">Kepala Sekolah Unit:</span> {profil.namaKepala || 'Belum diatur di Kelola Data Guru'}{profil.nipKepala ? ` / NIP. ${profil.nipKepala}` : ''}</p>
+                    <p><span className="font-bold text-gray-600">Mudir:</span> {profil.namaMudir || 'Belum diatur di Kelola Data Guru'}</p>
+                    <p><span className="font-bold text-gray-600">Kepala Sekolah Unit:</span> {profil.namaKepala || 'Belum diatur di Kelola Data Guru'}{profil.nipKepala ? ` / NUPTK. ${profil.nipKepala}` : ''}</p>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="col-span-2"><label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">Titi Mangsa (tanggal surat)</label><input type="text" value={profil.titiMangsa} onChange={e=>setProfil(p=>({...p,titiMangsa:e.target.value}))} placeholder={titiMangsaHariIni(profil.kota)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#F5EDF7]0" /><p className="text-[9px] text-gray-400 mt-0.5">Kosong = otomatis hari ini</p></div>
