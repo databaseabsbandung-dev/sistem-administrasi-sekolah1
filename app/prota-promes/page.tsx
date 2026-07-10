@@ -116,6 +116,7 @@ interface Guru {
   nip?: string
   mapelIds: string[]
   rombelIds: string[]
+  mapelRombel?: Record<string, string[]>
   unitIds?: string[]
 }
 
@@ -1443,15 +1444,27 @@ export default function ProtaPromesPage() {
                 className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white font-semibold outline-none focus:ring-2 focus:ring-[#6A197D]">
                 <option value="">-- Pilih Kelas --</option>
                 {(() => {
-                  const punyaMappingRombel = !!guruTerpilih?.rombelIds?.length
+                  // PERBAIKAN: field "rombelIds" di data guru TIDAK PERNAH diisi
+                  // sama sekali oleh Kelola Data Guru -- yang benar-benar tersimpan
+                  // adalah "mapelRombel" (pemetaan per-mapel -> daftar kelas).
+                  // Union dari semua kelas di seluruh mapelRombel guru itulah yang
+                  // dipakai sebagai daftar kelas yang benar-benar diampu.
+                  const rombelIdGuru = new Set<string>()
+                  Object.values(guruTerpilih?.mapelRombel || {}).forEach((ids: any) => (ids || []).forEach((id: string) => rombelIdGuru.add(id)))
+                  const punyaMappingRombel = rombelIdGuru.size > 0
                   let list = (!filterGuruId || !punyaMappingRombel)
                     ? daftarRombel
-                    : daftarRombel.filter(r => guruTerpilih?.rombelIds?.includes(r.id))
+                    : daftarRombel.filter(r => rombelIdGuru.has(r.id))
                   if (filterUnitId) {
-                    list = list.filter(r => {
+                    const listTersaring = list.filter(r => {
                       const t = daftarTingkat.find((tt: any) => tt.nama === r.tingkat)
                       return t?.lembagaId === filterUnitId
                     })
+                    // Kalau penyaringan per-unit ternyata kosong (mis. data Master
+                    // Tingkat belum lengkap mengaitkan ke unit), jangan sampai
+                    // dropdown Kelas jadi kosong total -- tampilkan semua kelas
+                    // saja sebagai jaga-jaga, lebih baik daripada tidak muncul.
+                    if (listTersaring.length > 0) list = listTersaring
                   }
                   return list.map(r => <option key={r.id} value={r.id}>Kelas {r.nama}</option>)
                 })()}

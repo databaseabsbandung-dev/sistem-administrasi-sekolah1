@@ -5,6 +5,7 @@ import Sidebar from '@/components/Sidebar'
 import { supabase } from '@/app/supabase'
 import { useAksesGuard } from '@/lib/useAksesGuard'
 import { useRouter } from 'next/navigation'
+import { jalankanMigrasiArsipTahun, adaDataLamaBelumBermigrasi, type HasilMigrasiTahun } from '@/lib/migrasiTahunAjaran'
 
 type Status = 'menunggu' | 'jalan' | 'lulus' | 'gagal'
 
@@ -28,6 +29,18 @@ const LANGKAH_AWAL: Langkah[] = [
 export default function StatusSinkronisasiPage() {
   const diizinkanAkses = useAksesGuard('diagnostik')
   const [langkah, setLangkah] = useState<Langkah[]>(LANGKAH_AWAL)
+  const [hasilMigrasi, setHasilMigrasi] = useState<HasilMigrasiTahun | null>(null)
+  const [adaDataLama, setAdaDataLama] = useState(false)
+
+  useEffect(() => {
+    setAdaDataLama(adaDataLamaBelumBermigrasi())
+  }, [])
+
+  const handleMigrasi = () => {
+    const hasil = jalankanMigrasiArsipTahun()
+    setHasilMigrasi(hasil)
+    setAdaDataLama(adaDataLamaBelumBermigrasi())
+  }
   const [berjalan, setBerjalan] = useState(false)
   const [isAdminAsli, setIsAdminAsli] = useState<boolean | null>(null)
   const router = useRouter()
@@ -228,6 +241,42 @@ export default function StatusSinkronisasiPage() {
             gunakan untuk memastikan data benar-benar tersimpan &amp; terbaca dari cloud.
           </p>
         </header>
+
+        {/* PEMULIHAN DATA LAMA (sebelum fitur Arsip per Tahun Ajaran) */}
+        <div className={`border rounded-xl p-5 space-y-3 ${adaDataLama ? 'bg-[#FFF3C2] border-[#FFE480]' : 'bg-emerald-50 border-emerald-200'}`}>
+          <h2 className="font-baloo font-bold text-sm text-slate-800">Pemulihan Data Lama (Arsip per Tahun Ajaran)</h2>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Sejak fitur &quot;Arsip per Tahun Ajaran&quot; ditambahkan, data Kaldik/Jadwal/CP-TP-ATP/Minggu Efektif
+            disimpan dengan kunci baru yang melekat pada tahun ajaran aktif. Kalau aplikasi ini sudah dipakai
+            <strong> sebelum</strong> fitur itu ada, datanya tersimpan di kunci lama dan bisa terlihat seperti
+            &quot;hilang&quot; setelah update — padahal masih ada, cuma perlu disalin sekali ke kunci baru.
+            Proses ini <strong>aman diulang</strong> dan tidak menghapus data apapun.
+          </p>
+          {adaDataLama ? (
+            <p className="text-xs font-bold text-[#8A6D00]">⚠️ Terdeteksi ada data lama yang belum disalin ke kunci baru.</p>
+          ) : (
+            <p className="text-xs font-bold text-emerald-700">✓ Tidak ada data lama yang perlu dipulihkan (atau sudah pernah dijalankan).</p>
+          )}
+          <button
+            onClick={handleMigrasi}
+            className="bg-[#6A197D] hover:bg-[#571466] text-white font-baloo font-bold px-5 py-2.5 rounded-xl text-xs transition"
+          >
+            Jalankan Pemulihan Data Lama
+          </button>
+          {hasilMigrasi && (
+            <div className="text-[11px] space-y-1.5 pt-2 border-t border-slate-200/70">
+              {hasilMigrasi.disalin.length > 0 && (
+                <p className="text-emerald-700"><strong>Disalin ({hasilMigrasi.disalin.length}):</strong> {hasilMigrasi.disalin.join(', ')}</p>
+              )}
+              {hasilMigrasi.dilewati.length > 0 && (
+                <p className="text-slate-500"><strong>Dilewati, kunci baru sudah terisi ({hasilMigrasi.dilewati.length}):</strong> {hasilMigrasi.dilewati.join(', ')}</p>
+              )}
+              {hasilMigrasi.disalin.length === 0 && (
+                <p className="text-slate-500">Tidak ada data lama yang perlu disalin — semua kunci baru sudah terisi atau memang belum pernah ada data sama sekali.</p>
+              )}
+            </div>
+          )}
+        </div>
 
         <button
           onClick={jalankanTes}
