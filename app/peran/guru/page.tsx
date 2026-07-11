@@ -11,6 +11,18 @@ import {
   Trash2, Edit2, Users, ArrowLeft, LogOut, Landmark, UserPlus, BookOpen, Layers, CheckSquare, Download, Search, LayoutGrid, ClipboardList
 } from 'lucide-react'
 
+// Simpan daftar guru SEKALIGUS jaga "guru_login_lookup" tetap sinkron.
+// guru_login_lookup HANYA berisi {nama, email} -- tanpa NIP/data lain --
+// dan sengaja tetap bisa dibaca publik (lihat migrations/001_app_storage.sql)
+// supaya halaman login Guru masih bisa mencari akunnya SEBELUM berhasil
+// login, sementara data guru yang sesungguhnya (master_guru, lengkap
+// dengan NIP dkk) sekarang WAJIB login dulu untuk bisa dibaca.
+function simpanDaftarGuru(daftar: any[]) {
+  localStorage.setItem('master_guru', JSON.stringify(daftar))
+  const lookup = daftar.filter(g => g.email).map(g => ({ nama: g.nama, email: g.email }))
+  localStorage.setItem('guru_login_lookup', JSON.stringify(lookup))
+}
+
 export default function MasterGuruPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -78,7 +90,17 @@ export default function MasterGuruPage() {
         if (storedRombel) setDaftarRombel(JSON.parse(storedRombel))
 
         const storedGuru = localStorage.getItem('master_guru')
-        if (storedGuru) setDaftarGuru(JSON.parse(storedGuru))
+        if (storedGuru) {
+          const parsedGuru = JSON.parse(storedGuru)
+          setDaftarGuru(parsedGuru)
+          // Migrasi otomatis (sekali jalan, aman diulang): untuk sekolah yang
+          // sudah lebih dulu memakai sistem ini SEBELUM key "guru_login_lookup"
+          // ada -- supaya login guru tidak sempat terputus menunggu Admin
+          // menyimpan ulang data satu-satu, buat otomatis dari data yang sudah ada.
+          if (!localStorage.getItem('guru_login_lookup') && parsedGuru.length > 0) {
+            simpanDaftarGuru(parsedGuru)
+          }
+        }
 
         setLoading(false)
       }
@@ -209,26 +231,31 @@ export default function MasterGuruPage() {
       unitIds: unitTerpilih, 
       peranIds: peranDipilih,
       email: autoEmail,
-      password: autoPassword
+      // PENTING (keamanan): password TIDAK disimpan di sini. Data guru ini
+      // (master_guru) tersinkron ke cloud (tabel app_storage) yang bisa
+      // dibaca publik untuk keperluan lookup login -- kalau password ikut
+      // disimpan di sini, SIAPAPUN di internet bisa membaca password asli
+      // semua guru. Password HANYA dikirim sekali ke API pembuatan akun
+      // (buatAkunGuruOtomatis) di bawah, lalu dibuang dari memori.
     }
 
     if (guruId) {
       const updated = daftarGuru.map(item => item.id === guruId ? newGuru : item)
-      setDaftarGuru(updated); localStorage.setItem('master_guru', JSON.stringify(updated))
+      setDaftarGuru(updated); simpanDaftarGuru(updated)
       const hasil = await buatAkunGuruOtomatis({ email: autoEmail, password: autoPassword, nama: namaGuru })
       if (!hasil.ok) {
         alert(`Data staf berhasil diperbarui, TAPI akun login otomatis gagal dibuat: ${hasil.error}\n\nData tetap tersimpan, silakan perbaiki konfigurasi server lalu simpan ulang.`)
       } else {
-        alert('Data staf berhasil diperbarui, dan akun login otomatis sudah disiapkan!')
+        alert(`Data staf berhasil diperbarui, dan akun login otomatis sudah disiapkan!\n\nKREDENSIAL LOGIN (catat/berikan ke guru sekarang -- tidak akan ditampilkan lagi setelah ini):\nNama Akun (Email): ${autoEmail}\nKata Sandi: ${autoPassword}`)
       }
     } else {
       const updated = [...daftarGuru, newGuru]
-      setDaftarGuru(updated); localStorage.setItem('master_guru', JSON.stringify(updated))
+      setDaftarGuru(updated); simpanDaftarGuru(updated)
       const hasil = await buatAkunGuruOtomatis({ email: autoEmail, password: autoPassword, nama: namaGuru })
       if (!hasil.ok) {
         alert(`Staf/Guru baru berhasil didaftarkan, TAPI akun login otomatis gagal dibuat: ${hasil.error}\n\nData tetap tersimpan, silakan perbaiki konfigurasi server lalu simpan ulang.`)
       } else {
-        alert('Staf/Guru baru berhasil didaftarkan, dan akun login otomatis sudah siap dipakai!')
+        alert(`Staf/Guru baru berhasil didaftarkan, dan akun login otomatis sudah siap dipakai!\n\nKREDENSIAL LOGIN (catat/berikan ke guru sekarang -- tidak akan ditampilkan lagi setelah ini):\nNama Akun (Email): ${autoEmail}\nKata Sandi: ${autoPassword}`)
       }
     }
     
@@ -243,140 +270,156 @@ export default function MasterGuruPage() {
     if (!file) return
 
     setLoading(true)
-    const reader = new FileReader()
-    reader.onload = async (event) => {
-      const text = event.target?.result as string
+
+    // Dukung file Excel (.xlsx) -- kolom asli, tidak perlu tanda pemisah --
+    // sekaligus file .csv lama (untuk yang masih punya file lama), supaya
+    // tidak ada yang mendadak tidak bisa impor lagi.
+    const isExcel = /\.xlsx?$/i.test(file.name)
+    let rows: string[][]
+    if (isExcel) {
+      const XLSX = await import('xlsx')
+      const buffer = await file.arrayBuffer()
+      const wb = XLSX.read(buffer, { type: 'array' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const semuaBaris: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', blankrows: false })
+        .map((r: any) => r.map((c: any) => String(c ?? '').trim()))
+      rows = semuaBaris.slice(1) // baris pertama = header, dilewati
+    } else {
+      const text = await file.text()
       const lines = text.split(/\r?\n/).map(line => line.trim()).filter(line => line !== '')
-      const rows = lines.slice(1) // baris pertama = header, dilewati
-      const importedGurus: any[] = []
-      let skippedCount = 0
-
-      let currentDaftarGuru = [...daftarGuru]
-
-      // Kumpulan nama akun (bagian sebelum @abs.sch.id) yang SUDAH dipakai,
-      // supaya tidak ada dua guru dengan email login yang sama persis.
-      const namaAkunTerpakai = new Set<string>(
-        currentDaftarGuru
-          .map((g: any) => (g.email || '').split('@')[0])
-          .filter(Boolean)
-      )
-
-      const bersihkanTeksAkun = (str: string) => str.replace(/[^a-zA-Z]/g, '').toLowerCase()
-
-      // Kalau Kolom B (Nama Akun) dikosongkan di CSV, turunkan otomatis
-      // dari 2 kata pertama Nama Lengkap (tanpa gelar).
-      const turunkanNamaAkunOtomatis = (namaLengkap: string) => {
-        const namaTanpaGelar = namaLengkap.split(',')[0].trim()
-        const duaKataDepan = namaTanpaGelar.split(/\s+/).filter(Boolean).slice(0, 2).join('')
-        return bersihkanTeksAkun(duaKataDepan) || 'guru'
-      }
-
-      const pastikanNamaAkunUnik = (namaAkunAwal: string) => {
-        let kandidat = namaAkunAwal
-        let counter = 2
-        while (namaAkunTerpakai.has(kandidat)) {
-          kandidat = `${namaAkunAwal}${counter}`
-          counter++
-        }
-        namaAkunTerpakai.add(kandidat)
-        return kandidat
-      }
-
-      for (let row of rows) {
+      rows = lines.slice(1).map(row => {
         // Pakai titik-koma (;) sebagai pemisah kalau ada -- nama guru sering
         // mengandung koma dari gelar (mis. "Ahmad Fauzi, S.Pd"), jadi koma
         // biasa TIDAK aman dipakai sebagai pemisah kolom.
         const delimiter = row.includes(';') ? ';' : ','
-        const cols = row.split(delimiter).map(c => c.trim().replace(/^["']|["']$/g, ''))
+        return row.split(delimiter).map(c => c.trim().replace(/^["']|["']$/g, ''))
+      })
+    }
 
-        // Kolom A: Nama Lengkap & Gelar (wajib)
-        // Kolom B: Nama Akun (opsional -- kosongkan untuk otomatis)
-        // Kolom C: Kata Sandi (opsional -- kosongkan untuk otomatis "123456")
-        // Kolom D: NIP/NUPTK (opsional)
-        const nama = cols[0] ? cols[0].trim() : ''
-        const namaAkunInput = cols[1] ? cols[1].trim() : ''
-        const passwordInput = cols[2] ? cols[2].trim() : ''
-        const nip = cols[3] ? cols[3].trim() : ''
+    const importedGurus: any[] = []
+    let skippedCount = 0
 
-        if (!nama) continue
+    let currentDaftarGuru = [...daftarGuru]
 
-        const existingIndex = currentDaftarGuru.findIndex(
-          (g) => g.nama.trim().toLowerCase() === nama.trim().toLowerCase() && g.nip === nip
-        )
+    // Kumpulan nama akun (bagian sebelum @abs.sch.id) yang SUDAH dipakai,
+    // supaya tidak ada dua guru dengan email login yang sama persis.
+    const namaAkunTerpakai = new Set<string>(
+      currentDaftarGuru
+        .map((g: any) => (g.email || '').split('@')[0])
+        .filter(Boolean)
+    )
 
-        if (existingIndex !== -1) {
-          // Guru yang sama (nama & NIP identik) sudah ada -- perbarui data
-          // umumnya saja, TIDAK mengubah akun/password yang sudah aktif
-          // (supaya tidak tiba-tiba mengganti kredensial yang sudah dipakai).
-          currentDaftarGuru[existingIndex] = {
-            ...currentDaftarGuru[existingIndex],
-            nama,
-            nip,
-          }
-          skippedCount++
-          continue
-        }
+    const bersihkanTeksAkun = (str: string) => str.replace(/[^a-zA-Z]/g, '').toLowerCase()
 
-        const namaAkunAwal = namaAkunInput ? bersihkanTeksAkun(namaAkunInput) : turunkanNamaAkunOtomatis(nama)
-        const namaAkun = pastikanNamaAkunUnik(namaAkunAwal || 'guru')
-        const autoEmail = `${namaAkun}@abs.sch.id`
-        const autoPassword = passwordInput || '123456'
+    // Kalau Kolom B (Nama Akun) dikosongkan, turunkan otomatis dari 2 kata
+    // pertama Nama Lengkap (tanpa gelar).
+    const turunkanNamaAkunOtomatis = (namaLengkap: string) => {
+      const namaTanpaGelar = namaLengkap.split(',')[0].trim()
+      const duaKataDepan = namaTanpaGelar.split(/\s+/).filter(Boolean).slice(0, 2).join('')
+      return bersihkanTeksAkun(duaKataDepan) || 'guru'
+    }
 
-        importedGurus.push({
-          id: 'guru-' + Date.now() + Math.random(),
+    const pastikanNamaAkunUnik = (namaAkunAwal: string) => {
+      let kandidat = namaAkunAwal
+      let counter = 2
+      while (namaAkunTerpakai.has(kandidat)) {
+        kandidat = `${namaAkunAwal}${counter}`
+        counter++
+      }
+      namaAkunTerpakai.add(kandidat)
+      return kandidat
+    }
+
+    for (const cols of rows) {
+      // Kolom A: Nama Lengkap & Gelar (wajib)
+      // Kolom B: Nama Akun (opsional -- kosongkan untuk otomatis)
+      // Kolom C: Kata Sandi (opsional -- kosongkan untuk otomatis "123456")
+      // Kolom D: NIP/NUPTK (opsional)
+      const nama = cols[0] ? cols[0].trim() : ''
+      const namaAkunInput = cols[1] ? cols[1].trim() : ''
+      const passwordInput = cols[2] ? cols[2].trim() : ''
+      const nip = cols[3] ? cols[3].trim() : ''
+
+      if (!nama) continue
+
+      const existingIndex = currentDaftarGuru.findIndex(
+        (g) => g.nama.trim().toLowerCase() === nama.trim().toLowerCase() && g.nip === nip
+      )
+
+      if (existingIndex !== -1) {
+        // Guru yang sama (nama & NIP identik) sudah ada -- perbarui data
+        // umumnya saja, TIDAK mengubah akun/password yang sudah aktif
+        // (supaya tidak tiba-tiba mengganti kredensial yang sudah dipakai).
+        currentDaftarGuru[existingIndex] = {
+          ...currentDaftarGuru[existingIndex],
           nama,
           nip,
-          mapelIds: [],
-          mapelRombel: {},
-          unitIds: [],
-          peranIds: [],
-          email: autoEmail,
-          password: autoPassword,
-        })
+        }
+        skippedCount++
+        continue
       }
 
-      const updated = [...currentDaftarGuru, ...importedGurus]
-      setDaftarGuru(updated)
-      localStorage.setItem('master_guru', JSON.stringify(updated))
+      const namaAkunAwal = namaAkunInput ? bersihkanTeksAkun(namaAkunInput) : turunkanNamaAkunOtomatis(nama)
+      const namaAkun = pastikanNamaAkunUnik(namaAkunAwal || 'guru')
+      const autoEmail = `${namaAkun}@abs.sch.id`
+      const autoPassword = passwordInput || '123456'
 
-      // Buat akun login Supabase Auth secara berurutan untuk tiap guru BARU
-      // (data yang sudah ada sebelumnya diasumsikan sudah punya akun).
-      let akunBerhasil = 0
-      let akunGagal = 0
-      for (const g of importedGurus) {
-        const hasil = await buatAkunGuruOtomatis({ email: g.email, password: g.password, nama: g.nama })
-        if (hasil.ok) akunBerhasil++
-        else akunGagal++
-      }
-
-      alert(
-        `Impor selesai. ${importedGurus.length} data baru dimasukkan, ${skippedCount} data yang sama telah diperbarui.\n` +
-        `Akun login otomatis: ${akunBerhasil} berhasil dibuat` +
-        (akunGagal > 0 ? `, ${akunGagal} gagal (cek konfigurasi SUPABASE_SERVICE_ROLE_KEY di server -- lihat menu Status Sinkronisasi).` : '.')
-      )
-      setTabAktif('direktori')
-      setLoading(false)
+      importedGurus.push({
+        id: 'guru-' + Date.now() + Math.random(),
+        nama,
+        nip,
+        mapelIds: [],
+        mapelRombel: {},
+        unitIds: [],
+        peranIds: [],
+        email: autoEmail,
+        // password TIDAK disimpan di sini (lihat penjelasan keamanan di
+        // fungsi simpan satuan guru di atas) -- dipakai sekali di bawah
+        // untuk membuat akun, lalu dibuang.
+        _passwordSementara: autoPassword,
+      })
     }
-    reader.readAsText(file)
+
+    const updated = [...currentDaftarGuru, ...importedGurus].map(({ _passwordSementara, ...g }: any) => g)
+    setDaftarGuru(updated)
+    simpanDaftarGuru(updated)
+
+    // Buat akun login Supabase Auth secara berurutan untuk tiap guru BARU
+    // (data yang sudah ada sebelumnya diasumsikan sudah punya akun).
+    let akunBerhasil = 0
+    let akunGagal = 0
+    for (const g of importedGurus) {
+      const hasil = await buatAkunGuruOtomatis({ email: g.email, password: (g as any)._passwordSementara, nama: g.nama })
+      if (hasil.ok) akunBerhasil++
+      else akunGagal++
+    }
+
+    alert(
+      `Impor selesai. ${importedGurus.length} data baru dimasukkan, ${skippedCount} data yang sama telah diperbarui.\n` +
+      `Akun login otomatis: ${akunBerhasil} berhasil dibuat` +
+      (akunGagal > 0 ? `, ${akunGagal} gagal (cek konfigurasi SUPABASE_SERVICE_ROLE_KEY di server -- lihat menu Status Sinkronisasi).` : '.')
+    )
+    setTabAktif('direktori')
+    setLoading(false)
   }
 
-  const handleUnduhTemplat = () => {
+  const handleUnduhTemplat = async () => {
+    // File Excel (.xlsx) ASLI -- setiap data di kolom terpisah sungguhan,
+    // tidak perlu tanda pemisah apapun (koma/titik-koma).
     // Kolom A: Nama Lengkap & Gelar (wajib)
     // Kolom B: Nama Akun -- kosongkan untuk otomatis (2 kata pertama nama, tanpa gelar)
     // Kolom C: Kata Sandi -- kosongkan untuk otomatis "123456"
     // Kolom D: NIP/NUPTK (opsional)
-    // Pemisah kolom pakai titik-koma (;) karena nama sering mengandung koma dari gelar.
-    const csvTemplate =
-      `Nama Lengkap & Gelar;Nama Akun (opsional);Kata Sandi (opsional);NIP/NUPTK (opsional)\r\n` +
-      `Ahmad Fauzi, M.Pd;ahmadfauzi;123456;198001012005011001\r\n` +
-      `Siti Aminah, S.Pd;;;\r\n`
-    const encodedUri = encodeURI("data:text/csv;charset=utf-8," + csvTemplate)
-    const link = document.createElement("a")
-    link.setAttribute("href", encodedUri)
-    link.setAttribute("download", "Template_Impor_Data_Guru.csv")
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    const XLSX = await import('xlsx')
+    const dataSheet = [
+      { 'Nama Lengkap & Gelar': 'Ahmad Fauzi, M.Pd', 'Nama Akun (opsional)': 'ahmadfauzi', 'Kata Sandi (opsional)': '123456', 'NIP/NUPTK (opsional)': '198001012005011001' },
+      { 'Nama Lengkap & Gelar': 'Siti Aminah, S.Pd', 'Nama Akun (opsional)': '', 'Kata Sandi (opsional)': '', 'NIP/NUPTK (opsional)': '' },
+    ]
+    const ws = XLSX.utils.json_to_sheet(dataSheet)
+    ws['!cols'] = [{ wch: 26 }, { wch: 20 }, { wch: 18 }, { wch: 22 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Template Impor Guru')
+    XLSX.writeFile(wb, 'Template Impor Data Guru.xlsx')
   }
 
 
@@ -413,7 +456,7 @@ export default function MasterGuruPage() {
   const handleHapusGuru = (id: string) => {
     if (confirm('Hapus data staf/guru ini dari sistem?')) {
       const filtered = daftarGuru.filter(item => item.id !== id)
-      setDaftarGuru(filtered); localStorage.setItem('master_guru', JSON.stringify(filtered))
+      setDaftarGuru(filtered); simpanDaftarGuru(filtered)
     }
   }
 
@@ -617,7 +660,7 @@ export default function MasterGuruPage() {
                     
                     <input 
                       type="file" 
-                      accept=".csv" 
+                      accept=".xlsx,.xls,.csv" 
                       onChange={handleImporCsvGuru} 
                       className="text-xs file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-baloo font-bold file:bg-[#F7ECFA] file:text-[#57146A] hover:file:bg-[#EFD9F5] cursor-pointer mt-1" 
                     />

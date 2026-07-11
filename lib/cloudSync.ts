@@ -60,6 +60,27 @@ function hapusLokalTanpaKirimUlang(key: string) {
 
 const antrianKirim = new Map<string, ReturnType<typeof setTimeout>>()
 
+// Lacak perubahan yang BARU SAJA dikirim oleh perangkat/tab INI sendiri --
+// supaya saat notifikasi realtime "memantul" balik (echo) dari perubahan kita
+// sendiri, itu tidak dianggap "perubahan dari pengguna lain" yang memicu
+// reload. PENTING: banyak form di aplikasi ini menyimpan otomatis di setiap
+// perubahan (bukan cuma saat klik tombol Simpan) -- kalau ini tidak
+// disaring, halaman akan reload berulang-ulang setiap kali pengguna sendiri
+// mengetik/mengubah sesuatu, membuat aplikasi nyaris tidak bisa dipakai.
+const perubahanSendiri = new Map<string, { value: string | null; sampai: number }>()
+const MASA_BERLAKU_ECHO_MS = 6000
+
+function catatSebagaiPerubahanSendiri(key: string, value: string | null) {
+  perubahanSendiri.set(key, { value, sampai: Date.now() + MASA_BERLAKU_ECHO_MS })
+}
+
+function apakahEchoPerubahanSendiri(key: string, value: string | null): boolean {
+  const catatan = perubahanSendiri.get(key)
+  if (!catatan) return false
+  if (Date.now() > catatan.sampai) { perubahanSendiri.delete(key); return false }
+  return catatan.value === value
+}
+
 function kirimKeCloud(key: string, value: string | null) {
   if (harusDikecualikan(key)) return
 
@@ -69,6 +90,7 @@ function kirimKeCloud(key: string, value: string | null) {
   // Debounce singkat supaya ketikan cepat tidak membanjiri request ke cloud.
   const timer = setTimeout(async () => {
     antrianKirim.delete(key)
+    catatSebagaiPerubahanSendiri(key, value)
     try {
       if (value === null) {
         await supabase.from('app_storage').delete().eq('key', key)
@@ -138,13 +160,27 @@ function pasangRealtimeSubscription() {
         (payload: any) => {
           const row = payload.new || payload.old
           if (!row?.key || harusDikecualikan(row.key)) return
+          const nilaiBaru = payload.eventType === 'DELETE' ? null : (row.value ?? '')
+
+          // Kalau ini cuma "pantulan" dari perubahan yang BARU SAJA kita
+          // kirim sendiri (dari tab/perangkat ini), tulis ke localStorage
+          // seperti biasa (aman & tidak berbahaya, cuma menimpa dengan nilai
+          // yang sama), TAPI JANGAN beritahu UI untuk reload -- pengguna
+          // sudah lihat perubahannya sendiri secara langsung lewat state
+          // React, tidak perlu reload lagi.
+          const echoDiriSendiri = apakahEchoPerubahanSendiri(row.key, nilaiBaru)
+
           if (payload.eventType === 'DELETE') {
             hapusLokalTanpaKirimUlang(row.key)
           } else {
-            tulisLokalTanpaKirimUlang(row.key, row.value ?? '')
+            tulisLokalTanpaKirimUlang(row.key, nilaiBaru)
           }
-          // Beritahu bagian UI yang mau bereaksi (opsional, tidak wajib dipakai).
-          window.dispatchEvent(new CustomEvent('cloud-sync-update', { detail: { key: row.key } }))
+          if (!echoDiriSendiri) {
+            // Beritahu bagian UI yang mau bereaksi -- dipakai oleh
+            // CloudSyncProvider untuk memuat ulang halaman otomatis begitu
+            // ada perubahan SUNGGUHAN dari pengguna/perangkat lain.
+            window.dispatchEvent(new CustomEvent('cloud-sync-update', { detail: { key: row.key } }))
+          }
         }
       )
       .subscribe()

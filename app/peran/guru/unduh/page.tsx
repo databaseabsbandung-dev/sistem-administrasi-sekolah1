@@ -28,14 +28,14 @@ export default function UnduhDataGuruPage() {
     const storedGuru = localStorage.getItem('master_guru')
     if (storedGuru) {
       const parsedGuru = JSON.parse(storedGuru).map((g: any) => {
-        // PENTING: pakai email/password yang SUNGGUHAN tersimpan di data guru
-        // (g.email / g.password), BUKAN dihitung ulang dari nama -- karena
-        // guru hasil impor CSV dengan nama mirip/duplikat bisa punya sufiks
-        // angka tambahan di emailnya (mis. "budi2@abs.sch.id") supaya unik.
+        // PENTING (keamanan): password TIDAK LAGI disimpan di data guru sama
+        // sekali (dulu tersimpan sebagai teks biasa dan ikut tersinkron ke
+        // cloud yang bisa dibaca publik -- celah keamanan serius). Sekarang
+        // password hanya ada sesaat di memori saat admin membuat/mengganti
+        // akun, lalu dibuang. Di sini kita cuma tahu email-nya.
         return {
           ...g,
           email_abs: g.email || '(belum ada akun — simpan ulang data guru ini)',
-          password_abs: g.password || '123456',
         }
       })
       setDaftarGuru(parsedGuru)
@@ -65,7 +65,7 @@ export default function UnduhDataGuruPage() {
   const mulaiEdit = (item: any) => {
     setEditId(item.id)
     setEditNamaAkun((item.email_abs || '').includes('@') ? item.email_abs.split('@')[0] : '')
-    setEditPassword(item.password_abs || '')
+    setEditPassword('') // sengaja kosong -- password lama tidak lagi tersimpan/diketahui
   }
 
   const batalEdit = () => {
@@ -76,7 +76,15 @@ export default function UnduhDataGuruPage() {
 
   const simpanEdit = async (item: any) => {
     const namaAkunBaru = editNamaAkun.trim().replace(/[^a-zA-Z]/g, '').toLowerCase() || 'guru'
-    const passwordBaru = editPassword.trim() || '123456'
+    const passwordBaru = editPassword.trim()
+    // PENTING (keamanan): password lama TIDAK diketahui lagi (sengaja tidak
+    // disimpan). Jadi kalau kolom kata sandi dikosongkan, JANGAN diam-diam
+    // di-reset ke "123456" -- wajib diisi eksplisit setiap kali mengganti,
+    // supaya tidak ada akun yang tanpa sadar jadi lemah.
+    if (!passwordBaru) {
+      alert('Isi kata sandi baru untuk akun ini (wajib diisi setiap kali menyimpan perubahan, demi keamanan kata sandi lama tidak lagi disimpan/ditampilkan).')
+      return
+    }
     if (passwordBaru.length < 6) {
       alert('Kata sandi minimal 6 karakter.')
       return
@@ -93,17 +101,18 @@ export default function UnduhDataGuruPage() {
         return
       }
 
-      // 2) Perbarui data guru di master_guru (localStorage, ikut tersinkron ke cloud)
+      // 2) Perbarui data guru di master_guru -- HANYA email yang disimpan,
+      //    password TIDAK PERNAH ditulis ke sini (lihat catatan keamanan di atas).
       const storedGuru = localStorage.getItem('master_guru')
       const daftar = storedGuru ? JSON.parse(storedGuru) : []
       const diperbarui = daftar.map((g: any) =>
-        g.id === item.id ? { ...g, email: emailBaru, password: passwordBaru } : g
+        g.id === item.id ? { ...g, email: emailBaru } : g
       )
       localStorage.setItem('master_guru', JSON.stringify(diperbarui))
 
       muatUlangDaftarGuru()
       batalEdit()
-      alert('Nama akun & kata sandi berhasil diperbarui. Beri tahu guru yang bersangkutan kredensial barunya.')
+      alert('Nama akun & kata sandi berhasil diperbarui. Beri tahu guru yang bersangkutan kredensial barunya secara langsung/pribadi (jangan lewat pesan tidak aman).')
     } catch (e: any) {
       alert(`Terjadi kesalahan: ${e?.message || e}`)
     } finally {
@@ -111,34 +120,26 @@ export default function UnduhDataGuruPage() {
     }
   }
 
-  const handleUnduhCsv = () => {
+  const handleUnduhExcel = async () => {
     if (daftarGuru.length === 0) {
       alert('Belum ada data guru untuk diunduh.')
       return
     }
 
-    const headers = ['Nama Lengkap', 'NIP', 'Nama Akun (Email Login)', 'Kata Sandi']
-
-    const rows = daftarGuru.map(g => [
-      `"${g.nama.replace(/"/g, '""')}"`,
-      `"${(g.nip || '-').replace(/"/g, '""')}"`,
-      `"${g.email_abs}"`,
-      `"${g.password_abs}"`
-    ])
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(e => e.join(','))
-    ].join('\r\n')
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.setAttribute('href', url)
-    link.setAttribute('download', `Data_Kredensial_Guru_${namaInduk.replace(/[^a-z0-9]/gi, '_')}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    // File Excel (.xlsx) ASLI -- setiap data disimpan di SEL/kolom terpisah
+    // sungguhan (bukan teks yang dipisah tanda baca seperti CSV), jadi tidak
+    // ada lagi risiko salah pisah kolom di Excel.
+    const XLSX = await import('xlsx')
+    const dataSheet = daftarGuru.map(g => ({
+      'Nama': g.nama,
+      'Email': g.email_abs,
+      'Nama Akun': (g.email_abs || '').split('@')[0] || '',
+    }))
+    const ws = XLSX.utils.json_to_sheet(dataSheet)
+    ws['!cols'] = [{ wch: 28 }, { wch: 26 }, { wch: 20 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Data Guru')
+    XLSX.writeFile(wb, `Data Akun Guru ${namaInduk.replace(/[\\/:*?"<>|]/g, '-')}.xlsx`)
   }
 
   if (loading || diizinkanAkses === null) return <div className="p-8 text-center font-semibold text-[#6A197D]">Memuat Halaman Distribusi Data Guru...</div>
@@ -154,8 +155,8 @@ export default function UnduhDataGuruPage() {
               <h1 className="text-2xl font-baloo font-black text-slate-900">Unduh Profil & Kredensial Akun Pendidik</h1>
               <p className="text-xs text-gray-500">Daftar akun guru beserta nama akun (email login domain @abs.sch.id) dan kata sandi. Klik ikon pensil untuk mengubah nama akun/kata sandi seorang guru.</p>
            </div>
-           <button onClick={handleUnduhCsv} className="flex items-center gap-2 bg-[#FFDE59] hover:bg-[#E6C850] text-[#6A197D] font-baloo font-extrabold px-5 py-3 rounded-xl shadow-sm text-xs transition">
-              <Download className="w-4 h-4" /> Unduh Data Guru (.CSV)
+           <button onClick={handleUnduhExcel} className="flex items-center gap-2 bg-[#FFDE59] hover:bg-[#E6C850] text-[#6A197D] font-baloo font-extrabold px-5 py-3 rounded-xl shadow-sm text-xs transition">
+              <Download className="w-4 h-4" /> Unduh Data Guru (.xlsx)
            </button>
         </header>
 
@@ -201,11 +202,12 @@ export default function UnduhDataGuruPage() {
                                <input
                                  value={editPassword}
                                  onChange={e => setEditPassword(e.target.value)}
-                                 className="w-28 px-2 py-1.5 border rounded-lg text-xs font-mono outline-none focus:ring-2 focus:ring-[#8A3499]"
+                                 placeholder="Wajib isi kata sandi baru"
+                                 className="w-36 px-2 py-1.5 border rounded-lg text-xs font-mono outline-none focus:ring-2 focus:ring-[#8A3499]"
                                />
                              </td>
                            ) : (
-                             <td className="py-3.5 px-6 font-mono font-baloo font-black text-[#440F55] select-all tracking-widest">{item.password_abs}</td>
+                             <td className="py-3.5 px-6 font-mono text-slate-400 italic text-xs">•••••• (tersembunyi)</td>
                            )}
 
                            <td className="py-3.5 px-6">

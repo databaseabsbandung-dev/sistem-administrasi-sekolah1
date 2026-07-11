@@ -70,6 +70,13 @@ interface GuruRingkas {
 }
 interface PeranRingkas { id: string; nama: string }
 
+// Bersihkan karakter yang tidak boleh ada di nama file (filesystem-unsafe),
+// TANPA mengubah huruf besar/kecil atau spasi -- supaya nama file tetap
+// mudah dibaca apa adanya, mis. "Kaldik SMA Aisyiyah Boarding School 2026-2027".
+function namaFileAmanKaldik(s: string): string {
+  return s.replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim()
+}
+
 function ambilNipGuru(g: GuruRingkas): string {
   return g.nip || g.nipGuru || g.nomorInduk || ''
 }
@@ -276,7 +283,7 @@ async function buatDokumenPDF(params: ParamsPDF) {
 
   function drawKop(y0:number):number {
     let y=y0
-    doc.setLineWidth(1.1);doc.setDrawColor(...NAVY);doc.line(ML,y,PW-MR,y);y+=2
+    doc.setLineWidth(1.1);doc.setDrawColor(0,0,0);doc.line(ML,y,PW-MR,y);y+=2
     doc.setFont('times','bold');doc.setFontSize(13);doc.setTextColor(...DARK)
     doc.text('KALENDER PENDIDIKAN',PW/2,y+4.5,{align:'center'})
     doc.setFontSize(10.5)
@@ -284,7 +291,7 @@ async function buatDokumenPDF(params: ParamsPDF) {
     doc.setFont('times','normal');doc.setFontSize(8);doc.setTextColor(...DARK)
     doc.text(`TAHUN AJARAN ${tahunAjaran}`,PW/2,y+15.5,{align:'center'})
     y+=19
-    doc.setLineWidth(0.6);doc.setDrawColor(...NAVY);doc.line(ML,y,PW-MR,y)
+    doc.setLineWidth(0.6);doc.setDrawColor(0,0,0);doc.line(ML,y,PW-MR,y)
     return y+4
   }
 
@@ -292,11 +299,11 @@ async function buatDokumenPDF(params: ParamsPDF) {
   // dibuat jauh lebih pendek dari kop halaman 1 supaya tidak boros ruang.
   function drawKopLanjutan(y0:number):number {
     let y=y0
-    doc.setLineWidth(0.6);doc.setDrawColor(...NAVY);doc.line(ML,y,PW-MR,y);y+=3.5
+    doc.setLineWidth(0.6);doc.setDrawColor(0,0,0);doc.line(ML,y,PW-MR,y);y+=3.5
     doc.setFont('times','bold');doc.setFontSize(8.5);doc.setTextColor(...DARK)
     doc.text(`KALENDER PENDIDIKAN — ${namaInstitusi.toUpperCase()} — TA ${tahunAjaran} (Lanjutan)`,PW/2,y,{align:'center'})
     y+=3.5
-    doc.setLineWidth(0.4);doc.setDrawColor(...NAVY);doc.line(ML,y,PW-MR,y)
+    doc.setLineWidth(0.4);doc.setDrawColor(0,0,0);doc.line(ML,y,PW-MR,y)
     return y+3.5
   }
 
@@ -331,7 +338,7 @@ async function buatDokumenPDF(params: ParamsPDF) {
       const cx=x+i*CELL_W
       doc.setFillColor(...NAVY_LIGHT)
       doc.rect(cx,y,CELL_W,dayHdrH,'F')
-      doc.setDrawColor(205,180,210);doc.setLineWidth(0.1)
+      doc.setDrawColor(0,0,0);doc.setLineWidth(0.1)
       doc.rect(cx,y,CELL_W,dayHdrH,'S')
       doc.setFont('times','bold');doc.setFontSize(filterSemester==='semua'?4.3:5.1);doc.setTextColor(...NAVY)
       doc.text(h,cx+CELL_W/2,y+dayHdrH-1,{align:'center'})
@@ -355,7 +362,7 @@ async function buatDokumenPDF(params: ParamsPDF) {
         const agColor=getDateColor(cell.dateStr,uid)
         if(agColor) {
           doc.setFillColor(...agColor);doc.rect(cx,cy,CELL_W,rowH,'F')
-          doc.setTextColor(255,255,255);doc.setFont('times','bold')
+          doc.setTextColor(0,0,0);doc.setFont('times','bold')
         } else {
           doc.setFillColor(255,255,255);doc.rect(cx,cy,CELL_W,rowH,'F')
           doc.setTextColor(40,20,48);doc.setFont('times','normal')
@@ -364,21 +371,21 @@ async function buatDokumenPDF(params: ParamsPDF) {
         doc.setFillColor(250,246,251);doc.rect(cx,cy,CELL_W,rowH,'F')
         doc.setTextColor(180,160,185);doc.setFont('times','normal')
       }
-      doc.setDrawColor(220,200,222);doc.setLineWidth(0.1)
+      doc.setDrawColor(0,0,0);doc.setLineWidth(0.1)
       doc.rect(cx,cy,CELL_W,rowH,'S')
       doc.setFontSize(filterSemester==='semua'?4.4:5.3)
       doc.text(String(cell.day),cx+CELL_W/2,cy+rowH-1,{align:'center'})
     })
 
     // Bingkai luar kalender (menyatu dengan kotak keterangan di bawahnya)
-    doc.setDrawColor(...NAVY);doc.setLineWidth(0.35)
+    doc.setDrawColor(0,0,0);doc.setLineWidth(0.35)
     doc.rect(x,y-dayHdrH-monthHdrH,COL_W,monthHdrH+dayHdrH+6*rowH,'S')
   }
 
   // ── Ukuran teks kotak keterangan (agenda) ──────────────────────────────
   const AG_PAD=1.6
-  const AG_LINE_H=filterSemester==='semua'?2.5:3.1
-  const AG_FONT_SIZE=filterSemester==='semua'?5.0:5.8
+  const AG_LINE_H=filterSemester==='semua'?3.3:4.0
+  const AG_FONT_SIZE=filterSemester==='semua'?6.6:7.6
   const AG_BUFFER=0.4 // sedikit ruang napas di bawah, konsisten dipakai di kedua fungsi di bawah
 
   function ukurBarisAgenda(text:string):string[] {
@@ -398,7 +405,7 @@ async function buatDokumenPDF(params: ParamsPDF) {
   function hitungTinggiAlamiAgenda(bulanNama:string,jumlahHari:number,uid:string) {
     const list=getAgendaBulanCetak(bulanNama,jumlahHari,uid,daftarAgenda,daftarKlasifikasiAgenda)
     if(list.length===0) return {natural:AG_PAD*2+AG_LINE_H, list}
-    doc.setFont('times','normal');doc.setFontSize(AG_FONT_SIZE)
+    doc.setFont('times','bold');doc.setFontSize(AG_FONT_SIZE)
     let totalLines=0
     list.forEach(ag=>{
       const lines=ukurBarisAgenda(`\u2022 ${ag.tanggal} : ${ag.keterangan}`)
@@ -406,14 +413,17 @@ async function buatDokumenPDF(params: ParamsPDF) {
     })
     // Baris pertama butuh (AG_PAD+AG_LINE_H) sebelum teks pertama digambar (baseline),
     // lalu tiap baris berikutnya menambah AG_LINE_H, plus sedikit ruang napas di bawah.
-    return {natural:AG_PAD+(totalLines+1)*AG_LINE_H+AG_BUFFER, list}
+    // Ditambah margin pengaman (+1 baris) supaya TIDAK PERNAH ada agenda yang
+    // terpotong/dilewati hanya karena selisih pembulatan kecil antara perhitungan
+    // ini dengan proses gambar sesungguhnya di drawAgendaBox().
+    return {natural:AG_PAD+(totalLines+2)*AG_LINE_H+AG_BUFFER, list}
   }
 
   function drawAgendaBox(x:number,y:number,h:number,bulanNama:string,jumlahHari:number,uid:string) {
     // Kotak keterangan bulan — border tegas, menempel persis di bawah grid tanggal.
     doc.setFillColor(255,255,255)
     doc.rect(x,y,COL_W,h,'F')
-    doc.setDrawColor(...NAVY)
+    doc.setDrawColor(0,0,0)
     doc.setLineWidth(0.35)
     doc.rect(x,y,COL_W,h,'S')
     const list=getAgendaBulanCetak(bulanNama,jumlahHari,uid,daftarAgenda,daftarKlasifikasiAgenda)
@@ -427,7 +437,7 @@ async function buatDokumenPDF(params: ParamsPDF) {
     // karena jsPDF bersifat stateful — kalau diukur pakai font/ukuran sisa dari elemen
     // lain sebelumnya (mis. font tebal grid tanggal), lebar hasil ukur jadi salah dan
     // teksnya bisa memotong/melewati garis tepi kolom saat digambar.
-    doc.setFont('times','normal');doc.setFontSize(AG_FONT_SIZE)
+    doc.setFont('times','bold');doc.setFontSize(AG_FONT_SIZE)
     for(const ag of list) {
       const [r,g,b]=hexToRgb(ag.warna)
       const text=`\u2022 ${ag.tanggal} : ${ag.keterangan}`
@@ -435,7 +445,7 @@ async function buatDokumenPDF(params: ParamsPDF) {
       // Batas bawah dihitung dengan buffer YANG SAMA seperti di hitungTinggiAlamiAgenda,
       // supaya kotak yang tingginya dari hasil hitungan itu benar-benar cukup memuat semuanya.
       if(ay+lines.length*AG_LINE_H>y+h-AG_BUFFER) { dilewati++; continue }
-      doc.setTextColor(r,g,b);doc.setFont('times','normal');doc.setFontSize(AG_FONT_SIZE)
+      doc.setTextColor(r,g,b);doc.setFont('times','bold');doc.setFontSize(AG_FONT_SIZE)
       lines.forEach((line:string)=>{ doc.text(line,x+AG_PAD,ay);ay+=AG_LINE_H })
     }
     if(dilewati>0) {
@@ -592,13 +602,13 @@ function CetakKaldikModal({onClose,namaSekolah,tahunAjaran,daftarAgenda,daftarUn
   }
   async function handlePreview() {
     setLoadingAksi('preview')
-    try { const d=await siapkanDoc(); const url=d.output('bloburl') as unknown as string; if(previewRef.current) URL.revokeObjectURL(previewRef.current); previewRef.current=url; setPreviewUrl(url) }
+    try { const d=await siapkanDoc(); const sfx=filterSemester==='semester1'?' Semester 1':filterSemester==='semester2'?' Semester 2':''; const namaFile=`${namaFileAmanKaldik(`Kaldik ${namaInstitusiCetak} ${tahunAjaran.replace(/\//g,'-')}${sfx}`)}.pdf`; const fileBernama=new File([d.output('blob')],namaFile,{type:'application/pdf'}); const url=URL.createObjectURL(fileBernama); if(previewRef.current) URL.revokeObjectURL(previewRef.current); previewRef.current=url; setPreviewUrl(url) }
     catch(e){console.error(e);alert('Gagal pratinjau. Pastikan: npm install jspdf jspdf-autotable')}
     finally{setLoadingAksi(null)}
   }
   async function handleUnduh() {
     setLoadingAksi('unduh')
-    try { const d=await siapkanDoc(); const sfx=filterSemester==='semester1'?'_Sem1':filterSemester==='semester2'?'_Sem2':'_Full'; d.save(`Kaldik_${namaInstitusiCetak.replace(/\s+/g,'_')}_${tahunAjaran.replace('/','-')}${sfx}.pdf`) }
+    try { const d=await siapkanDoc(); const sfx=filterSemester==='semester1'?' Semester 1':filterSemester==='semester2'?' Semester 2':''; d.save(`${namaFileAmanKaldik(`Kaldik ${namaInstitusiCetak} ${tahunAjaran.replace(/\//g,'-')}${sfx}`)}.pdf`) }
     catch(e){console.error(e);alert('Gagal unduh.')}
     finally{setLoadingAksi(null)}
   }
@@ -704,13 +714,16 @@ export default function KaldikPage() {
   const [showCetakModal,setShowCetakModal]=useState(false)
 
   const presetColors=[
-    {name:'Biru Navy',hex:'#1e3a8a'},{name:'Biru Royal',hex:'#1d4ed8'},{name:'Biru Standar',hex:'#2563eb'},{name:'Biru Terang',hex:'#3b82f6'},{name:'Biru Muda',hex:'#60a5fa'},
-    {name:'Hijau Tua',hex:'#065f46'},{name:'Hijau Zamrud',hex:'#059669'},{name:'Hijau Segar',hex:'#10b981'},{name:'Hijau Muda',hex:'#34d399'},{name:'Hijau Pastel',hex:'#a7f3d0'},
-    {name:'Ungu Gelap',hex:'#581c87'},{name:'Ungu Pekat',hex:'#6b21a8'},{name:'Ungu Standar',hex:'#7c3aed'},{name:'Ungu Terang',hex:'#8b5cf6'},{name:'Ungu Muda',hex:'#a78bfa'},
-    {name:'Merah Marun',hex:'#991b1b'},{name:'Merah Cabai',hex:'#dc2626'},{name:'Oranye Tua',hex:'#c2410c'},{name:'Oranye Standar',hex:'#ea580c'},{name:'Oranye Muda',hex:'#f97316'},
-    {name:'Emas Tua',hex:'#b45309'},{name:'Kuning Kunyit',hex:'#d97706'},{name:'Kuning Emas',hex:'#f59e0b'},{name:'Kuning Cerah',hex:'#fbbf24'},
-    {name:'Pink Magenta',hex:'#be185d'},{name:'Pink Terang',hex:'#ec4899'},{name:'Tosca Tua',hex:'#115e59'},{name:'Tosca/Teal',hex:'#0d9488'},{name:'Tosca Muda',hex:'#14b8a6'},
-    {name:'Abu Gelap',hex:'#4b5563'},{name:'Abu Sedang',hex:'#6b7280'},{name:'Abu Terang',hex:'#9ca3af'},
+    {name:'Biru Navy',hex:'#1e3a8a'},{name:'Biru Royal',hex:'#1d4ed8'},{name:'Biru Standar',hex:'#2563eb'},{name:'Biru Terang',hex:'#3b82f6'},{name:'Biru Muda',hex:'#60a5fa'},{name:'Biru Langit',hex:'#0ea5e9'},
+    {name:'Hijau Tua',hex:'#065f46'},{name:'Hijau Zamrud',hex:'#059669'},{name:'Hijau Segar',hex:'#10b981'},{name:'Hijau Muda',hex:'#34d399'},{name:'Hijau Pastel',hex:'#a7f3d0'},{name:'Hijau Lumut',hex:'#4d7c0f'},{name:'Hijau Limau',hex:'#84cc16'},
+    {name:'Ungu Gelap',hex:'#581c87'},{name:'Ungu Pekat',hex:'#6b21a8'},{name:'Ungu Standar',hex:'#7c3aed'},{name:'Ungu Terang',hex:'#8b5cf6'},{name:'Ungu Muda',hex:'#a78bfa'},{name:'Indigo',hex:'#4338ca'},
+    {name:'Merah Marun',hex:'#991b1b'},{name:'Merah Cabai',hex:'#dc2626'},{name:'Merah Terang',hex:'#ef4444'},{name:'Oranye Tua',hex:'#c2410c'},{name:'Oranye Standar',hex:'#ea580c'},{name:'Oranye Muda',hex:'#f97316'},
+    {name:'Emas Tua',hex:'#b45309'},{name:'Kuning Kunyit',hex:'#d97706'},{name:'Kuning Emas',hex:'#f59e0b'},{name:'Kuning Cerah',hex:'#fbbf24'},{name:'Kuning Lembut',hex:'#fde047'},
+    {name:'Pink Magenta',hex:'#be185d'},{name:'Pink Terang',hex:'#ec4899'},{name:'Pink Muda',hex:'#f9a8d4'},{name:'Rose',hex:'#e11d48'},
+    {name:'Tosca Tua',hex:'#115e59'},{name:'Tosca/Teal',hex:'#0d9488'},{name:'Tosca Muda',hex:'#14b8a6'},{name:'Cyan',hex:'#0891b2'},
+    {name:'Coklat Tua',hex:'#78350f'},{name:'Coklat',hex:'#92400e'},{name:'Coklat Muda',hex:'#b45309'},
+    {name:'Abu Gelap',hex:'#4b5563'},{name:'Abu Sedang',hex:'#6b7280'},{name:'Abu Terang',hex:'#9ca3af'},{name:'Abu Kebiruan',hex:'#64748b'},
+    {name:'Hitam',hex:'#000000'},{name:'Putih',hex:'#ffffff'},
   ]
 
   const [daftarUnitLembaga,setDaftarUnitLembaga]=useState<{id:string;label:string}[]>([{id:'lembaga-induk',label:'Lembaga / Yayasan Pusat'}])
@@ -1015,7 +1028,17 @@ export default function KaldikPage() {
                   <input type="text" value={labelKlasifikasi} onChange={e=>setLabelKlasifikasi(e.target.value)} placeholder="Contoh: Ujian Akhir Semester" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#F5EDF7]0"/></div>
                 <div><label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Warna Badge &amp; Tanggal PDF</label>
                   <div className="grid grid-cols-10 gap-1 bg-gray-50 p-2.5 rounded-lg border border-gray-100 max-h-56 overflow-y-auto">
-                    {presetColors.map((c,i)=><button type="button" key={i} onClick={()=>setWarnaKlasifikasiHex(c.hex)} title={c.name} className={`w-7 h-7 rounded-md flex items-center justify-center border-2 transition ${warnaKlasifikasiHex===c.hex?'border-[#6A197D] scale-110 shadow-md':'border-transparent hover:scale-105'}`} style={{backgroundColor:c.hex}}>{warnaKlasifikasiHex===c.hex&&<span className="text-white text-[8px] font-extrabold">✔</span>}</button>)}
+                    {presetColors.map((c,i)=>{
+                      const terangSekali = c.hex.toLowerCase()==='#ffffff'
+                      const terpilih = warnaKlasifikasiHex===c.hex
+                      return (
+                        <button type="button" key={i} onClick={()=>setWarnaKlasifikasiHex(c.hex)} title={c.name}
+                          className={`w-7 h-7 rounded-md flex items-center justify-center border-2 transition ${terpilih?'border-[#6A197D] scale-110 shadow-md':terangSekali?'border-slate-300':'border-transparent hover:scale-105'}`}
+                          style={{backgroundColor:c.hex}}>
+                          {terpilih&&<span className={`text-[8px] font-extrabold ${terangSekali?'text-slate-800':'text-white'}`}>✔</span>}
+                        </button>
+                      )
+                    })}
                   </div>
                   <div className="flex items-center gap-2 mt-2 bg-[#F5EDF7]/50 border border-[#EDE0F0] p-2 rounded-lg text-[11px] text-[#551566]">
                     <span className="w-3 h-3 rounded-full" style={{backgroundColor:warnaKlasifikasiHex}}/>Terpilih: <span className="font-bold">{presetColors.find(c=>c.hex===warnaKlasifikasiHex)?.name||'Custom'}</span>

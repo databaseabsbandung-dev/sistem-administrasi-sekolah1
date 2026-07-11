@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       const ACCENT = '#3b82f6'
       const GRAY = '#64748b'
       const LIGHT = '#f8fafc'
-      const BORDER = '#e2e8f0'
+      const BORDER = '#000000'
       const GREEN = '#166534'
       const GREEN_BG = '#f0fdf4'
       const VIOLET = '#4c1d95'
@@ -294,7 +294,7 @@ export async function POST(request: NextRequest) {
           .text(`Halaman ${i + 1} dari ${range.count}  ·  ${namaMapel} · Kelas ${kelas} · Semester ${semester === '1' ? 'Ganjil' : 'Genap'}`,
             L, doc.page.height - 35, { width: W, align: 'center' })
         doc.moveTo(L, doc.page.height - 40).lineTo(L + W, doc.page.height - 40)
-          .strokeColor('#e2e8f0').lineWidth(0.5).stroke()
+          .strokeColor('#000000').lineWidth(0.5).stroke()
       }
 
       doc.end()

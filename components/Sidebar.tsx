@@ -32,7 +32,7 @@ const MENU_ITEMS: MenuItem[] = [
   { moduleId: 'kaldik',         href: '/kaldik',         label: 'Kalender Pendidikan',  icon: CalendarDays, sectionBefore: 'Modul Administrasi' },
   { moduleId: 'jadwal',         href: '/jadwal',         label: 'Jadwal Pelajaran',     icon: Clock },
   { moduleId: 'cp_tp_atp',      href: '/cp-tp-atp',      label: 'CP, TP & ATP',         icon: FileText },
-  { moduleId: 'minggu_efektif', href: '/minggu-efektif', label: 'Minggu Efektif',       icon: BarChart2 },
+  { moduleId: 'minggu_efektif', href: '/minggu-efektif', label: 'Analisis Alokasi Waktu', icon: BarChart2 },
   { moduleId: 'prota_promes',   href: '/prota-promes',   label: 'Prota & Promes',       icon: FileSpreadsheet },
   { moduleId: 'rpp',            href: '/rpp',            label: 'RPP / Modul Ajar',     icon: BookOpen },
   { moduleId: 'diagnostik',     href: '/status-sinkronisasi', label: 'Status Sinkronisasi', icon: Activity, sectionBefore: 'Sistem' },

@@ -44,6 +44,12 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       )
     }
+    // Catatan: akun Guru yang memang diberi wewenang mengelola Kelola Data
+    // Guru (lewat Pembagian Peran) SENGAJA tetap boleh memicu pembuatan akun
+    // guru lain -- selama dia sudah lolos useAksesGuard('guru') di halaman
+    // itu. Yang penting: password baru selalu ditentukan/dilihat sendiri
+    // oleh pembuatnya saat itu juga (lewat form), bukan disimpan untuk
+    // dilihat kembali nanti -- lihat catatan keamanan di app/peran/guru/page.tsx.
 
     // 2) Pastikan service_role key sudah diatur di server (.env.local / env hosting).
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY

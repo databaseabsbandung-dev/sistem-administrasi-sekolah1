@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
       function drawRow(x: number, yPos: number, cells: Sel[], opts?: { header?: boolean; minHeight?: number }): number {
         const header = !!opts?.header
         doc.font(header || cells.some(c => c.bold) ? FONT_BOLD : FONT_REG)
-        doc.fontSize(7.5)
+        doc.fontSize(9)
         let tinggi = opts?.minHeight || (header ? 14 : 13)
         cells.forEach(c => {
           const h = doc.heightOfString(c.text || '', { width: c.width - PAD * 2 }) + PAD * 2
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
           doc.rect(cx, yPos, c.width, tinggi).stroke(borderColor)
           doc.fillColor(c.color || DARK)
             .font(header || c.bold ? FONT_BOLD : FONT_REG)
-            .fontSize(7.5)
+            .fontSize(9)
             .text(c.text || '', cx + PAD, yPos + PAD - 1, { width: c.width - PAD * 2, align: c.align || 'left' })
           cx += c.width
         })
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
       y += 22
 
       // ── BARIS IDENTITAS (Label : Value) ──
-      doc.font(FONT_REG).fontSize(9.5)
+      doc.font(FONT_REG).fontSize(11)
       const baris = (label: string, value: string) => {
         doc.text(`${label}`, L, y, { continued: false, width: 140 })
         doc.text(`: ${value || ''}`, L + 105, y, { width: W - 105 })
@@ -102,11 +102,11 @@ export async function POST(request: NextRequest) {
       doc.moveTo(L, y).lineTo(L + W, y).strokeColor(borderColor).lineWidth(0.75).stroke()
       y += 12
 
-      doc.font(FONT_BOLD).fontSize(10.5)
+      doc.font(FONT_BOLD).fontSize(12)
         .text('PERHITUNGAN MINGGU/JAM EFEKTIF', L, y, { width: W, align: 'center' })
       y += 18
 
-      doc.font(FONT_BOLD).fontSize(9.5)
+      doc.font(FONT_BOLD).fontSize(11)
         .text('A. PERHITUNGAN JAM EFEKTIF', L, y)
       y += 14
 
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
       const col1X = L
       const col2X = L + colW + colGap
 
-      doc.font(FONT_BOLD).fontSize(8.5).text('I. Jumlah Minggu :', col1X, y)
+      doc.font(FONT_BOLD).fontSize(10).text('I. Jumlah Minggu :', col1X, y)
       doc.text('II. Jumlah Minggu Tidak Efektif :', col2X, y)
       y += 13
       const yTabelAwal = y
@@ -151,8 +151,8 @@ export async function POST(request: NextRequest) {
       })
       yy = drawRow(col1X, yy, [
         { text: '', width: c1w[0] },
-        { text: 'Jumlah', width: c1w[1], bold: true },
-        { text: String(totalMinggu), width: c1w[2], align: 'center', bold: true },
+        { text: 'Jumlah', width: c1w[1] },
+        { text: String(totalMinggu), width: c1w[2], align: 'center' },
       ])
       const yAkhirKol1 = yy
 
@@ -192,8 +192,8 @@ export async function POST(request: NextRequest) {
       }
       yy = drawRow(col2X, yy, [
         { text: '', width: c2w[0] },
-        { text: 'Jumlah', width: c2w[1], bold: true },
-        { text: String(totalTE), width: c2w[2], align: 'center', bold: true },
+        { text: 'Jumlah', width: c2w[1] },
+        { text: String(totalTE), width: c2w[2], align: 'center' },
       ])
       const yAkhirKol2 = yy
 
@@ -201,70 +201,24 @@ export async function POST(request: NextRequest) {
 
       // ── III & IV (teks polos, tanpa kotak) ──
       const mingguEfektif = totalMinggu - totalTE
-      doc.font(FONT_BOLD).fontSize(8.5).fillColor(DARK)
+      doc.font(FONT_BOLD).fontSize(10).fillColor(DARK)
         .text('III. JUMLAH MINGGU EFEKTIF', L, y, { continued: true })
         .font(FONT_REG).text('= Jumlah Minggu - Jumlah Minggu Tidak Efektif', { continued: false })
       y += 12
-      doc.font(FONT_REG).fontSize(8.5).text(`= ${totalMinggu} - ${totalTE} Minggu`, L + 15, y)
+      doc.font(FONT_REG).fontSize(10).text(`= ${totalMinggu} - ${totalTE} Minggu`, L + 15, y)
       y += 12
-      doc.font(FONT_BOLD).fontSize(9).text(`= ${mingguEfektif} Minggu`, L + 15, y)
+      doc.font(FONT_BOLD).fontSize(10.5).text(`= ${mingguEfektif} Minggu`, L + 15, y)
       y += 18
 
       const jpMgg = jpPerMinggu || 0
       const totalJp = mingguEfektif * jpMgg
-      doc.font(FONT_BOLD).fontSize(8.5)
+      doc.font(FONT_BOLD).fontSize(10)
         .text('IV. JUMLAH JAM EFEKTIF', L, y, { continued: true })
         .font(FONT_REG).text('= Jumlah Minggu Efektif x Jumlah Jam Pelajaran', { continued: false })
       y += 12
-      doc.font(FONT_REG).fontSize(8.5).text(`= ${mingguEfektif} x ${jpMgg} Jam Pelajaran/Minggu`, L + 15, y)
+      doc.font(FONT_REG).fontSize(10).text(`= ${mingguEfektif} x ${jpMgg} Jam Pelajaran/Minggu`, L + 15, y)
       y += 12
-      doc.font(FONT_BOLD).fontSize(9).text(`= ${totalJp} Jam Pelajaran`, L + 15, y)
-      y += 22
-
-      // ── BAGIAN B: DISTRIBUSI ────────────────────────────────
-      if (y > doc.page.height - 200) { doc.addPage(); y = 50 }
-
-      doc.font(FONT_BOLD).fontSize(9.5).text('B. DISTRIBUSI ALOKASI WAKTU', L, y)
-      y += 14
-      doc.font(FONT_REG).fontSize(8.5).text('I. Alokasi Waktu/KD:', L, y)
-      y += 13
-
-      const dc = [25, W - 25 - 65, 65]
-      y = drawRow(L, y, [
-        { text: 'No', width: dc[0], align: 'center' },
-        { text: 'Tujuan Pembelajaran', width: dc[1] },
-        { text: 'Alokasi Waktu (JP)', width: dc[2], align: 'center' },
-      ], { header: true })
-
-      let totalAlokasi = 0
-      const barisTp: { nomor: string; deskripsi: string; jp: number }[] = distribusiTp && distribusiTp.length > 0
-        ? distribusiTp
-        : Array.from({ length: 5 }, () => ({ nomor: '', deskripsi: '', jp: 0 }))
-
-      barisTp.forEach((tp, i) => {
-        if (y > doc.page.height - 90) { doc.addPage(); y = 50 }
-        y = drawRow(L, y, [
-          { text: String(i + 1), width: dc[0], align: 'center' },
-          { text: tp.deskripsi || '', width: dc[1] },
-          { text: tp.jp ? String(tp.jp) : '', width: dc[2], align: 'center' },
-        ])
-        totalAlokasi += (tp.jp || 0)
-      })
-      y = drawRow(L, y, [
-        { text: '', width: dc[0] },
-        { text: 'Jumlah', width: dc[1], bold: true },
-        { text: String(totalAlokasi), width: dc[2], align: 'center', bold: true },
-      ])
-      y += 10
-
-      if (y > doc.page.height - 120) { doc.addPage(); y = 50 }
-
-      const jpCadangan = Math.max(0, totalJp - totalAlokasi)
-      doc.font(FONT_REG).fontSize(8.5)
-        .text('II. Banyaknya Jam Cadangan', L, y, { continued: true })
-        .text(' = Jumlah jam efektif - Jumlah alokasi waktu/KD', { continued: false })
-      y += 12
-      doc.font(FONT_BOLD).fontSize(9).text(`= ${jpCadangan} Jam Pelajaran`, L + 15, y)
+      doc.font(FONT_BOLD).fontSize(10.5).text(`= ${totalJp} Jam Pelajaran`, L + 15, y)
       y += 26
 
       // ── TANDA TANGAN ──────────────────────────────────────
@@ -281,7 +235,7 @@ export async function POST(request: NextRequest) {
 
       const tanggalHariIni = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
       const titiMangsaFinal = titiMangsa || `${kota || 'Bandung'}, ${tanggalHariIni}`
-      doc.font(FONT_REG).fontSize(9).fillColor(DARK)
+      doc.font(FONT_REG).fontSize(10.5).fillColor(DARK)
       if (namaGuru) {
         // Sejajar (rata kiri, titik X sama persis) dengan label "Guru Mata
         // Pelajaran," di bawahnya -- pihak KANAN blok tanda tangan.
@@ -295,25 +249,25 @@ export async function POST(request: NextRequest) {
       y += 12
 
       const ttdY = y
-      doc.font(FONT_REG).fontSize(9)
+      doc.font(FONT_REG).fontSize(10.5)
       doc.text(`${labelPenandatangan || 'Kepala Sekolah'},`, kolomKiriX, ttdY)
       if (namaGuru) doc.text('Guru Mata Pelajaran,', kolomKananX, ttdY)
 
       // Tanpa garis TTD -- langsung nama, jarak vertikal cukup untuk "tanda tangan basah".
       const namaY = ttdY + 42
 
-      doc.font(FONT_BOLD).fontSize(9)
+      doc.font(FONT_BOLD).fontSize(10.5)
         .text(namaPenandatangan || '', kolomKiriX, namaY, { width: kolomKiriW })
       // Mudir (Lembaga Pusat) TIDAK pakai NUPTK. Kepala Sekolah Unit tetap pakai.
       if (labelPenandatangan !== 'Mudir') {
-        doc.font(FONT_REG).fontSize(8)
+        doc.font(FONT_REG).fontSize(9.5)
           .text(`NUPTK: ${nipPenandatangan || '-'}`, kolomKiriX, namaY + 12, { width: kolomKiriW })
       }
 
       if (namaGuru) {
-        doc.font(FONT_BOLD).fontSize(9)
+        doc.font(FONT_BOLD).fontSize(10.5)
           .text(namaGuru, kolomKananX, namaY, { width: kolomKananW - 20 })
-        doc.font(FONT_REG).fontSize(8)
+        doc.font(FONT_REG).fontSize(9.5)
           .text(`NUPTK: ${nuptkGuru || '-'}`, kolomKananX, namaY + 12, { width: kolomKananW - 20 })
       }
 

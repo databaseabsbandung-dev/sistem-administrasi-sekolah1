@@ -139,7 +139,10 @@ interface KaldikEvent {
   lembagaTerlibat?: string[]
   tanggalMulai?: string
   nama?: string
+  kategoriKlasifikasi?: string
 }
+
+interface KlasifikasiAgenda { id: string; label: string; hexColor: string }
 
 interface ProfilSekolah {
   namaSekolah: string
@@ -170,6 +173,13 @@ const ANGKA_KE_ROMAWI: { [k: string]: string } = {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+// Bersihkan karakter yang tidak boleh ada di nama file (filesystem-unsafe),
+// tanpa mengubah huruf besar/kecil atau spasi -- nama file tetap mudah dibaca.
+// Contoh: "Prota Matematika Kelas 1 2025-2026"
+function namaFileAman(s: string): string {
+  return s.replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim()
+}
 
 const parseDate = (s: string): Date => {
   const [y, m, d] = s.split('-').map(Number)
@@ -248,6 +258,15 @@ function hitungMingguEfektifPerBulan(
 }
 
 /** Hitung total JP untuk guru-mapel-rombel dari matriks alokasi (fallback jika Jadwal kosong) */
+/** Ubah warna hex (mis. "#dc2626") jadi array RGB [r,g,b] yang dipakai jsPDF. */
+function hexKeRgb(hex: string): number[] {
+  const bersih = hex.replace('#', '')
+  const r = parseInt(bersih.substring(0, 2), 16) || 0
+  const g = parseInt(bersih.substring(2, 4), 16) || 0
+  const b = parseInt(bersih.substring(4, 6), 16) || 0
+  return [r, g, b]
+}
+
 function hitungTotalJp(strAlokasi: string): number {
   if (!strAlokasi) return 0
   return strAlokasi
@@ -278,6 +297,27 @@ interface MingguKapasitas {
   mingguKe: number          // 1..5, posisi minggu dalam bulan tsb
   efektifLembaga: boolean   // status institusional (≤2 hari libur Sen-Jum)
   capacityJp: number        // JP riil yang bisa diajarkan minggu ini (dari jadwal, dikurangi hari libur)
+  warnaKegiatan?: string    // warna klasifikasi kegiatan Kaldik yang paling banyak muncul minggu ini (kalau tidak efektif)
+}
+
+/** Bangun peta tanggal -> warna hex klasifikasi kegiatan, dari daftar event Kaldik
+ *  + daftar klasifikasinya -- dipakai supaya warna minggu "tidak efektif" di Promes
+ *  SAMA PERSIS dengan warna kegiatan yang tertulis di Kaldik, bukan abu-abu generik. */
+function buildWarnaKegiatanPerTanggal(events: KaldikEvent[], daftarKlasifikasi: KlasifikasiAgenda[]): Map<string, string> {
+  const map = new Map<string, string>()
+  events.forEach(ev => {
+    const mulai = ev.tanggalMulai || ev.tanggal
+    const selesai = ev.tanggalSelesai || mulai
+    if (!mulai) return
+    const warna = daftarKlasifikasi.find(k => k.id === ev.kategoriKlasifikasi)?.hexColor || '#4b5563'
+    let cur = parseDate(mulai)
+    const end = parseDate(selesai)
+    while (cur <= end) {
+      map.set(toDateStr(cur), warna)
+      cur = addDays(cur, 1)
+    }
+  })
+  return map
 }
 
 /** Untuk Promes: hitung, per bulan dalam satu semester, status tiap minggu (efektif utk lembaga
@@ -288,6 +328,7 @@ function hitungMingguKapasitas(
   tanggalSelesai: string,
   hariLiburSet: Set<string>,
   jpPerHari: Record<number, number>,
+  warnaPerTanggal?: Map<string, string>,
 ): Record<string, MingguKapasitas[]> {
   const mulai = parseDate(tanggalMulai)
   const selesai = parseDate(tanggalSelesai)
@@ -306,8 +347,19 @@ function hitungMingguKapasitas(
     }
     if (hariDlm.length > 0) {
       let hariLibur = 0
-      hariDlm.forEach(h => { if (hariLiburSet.has(toDateStr(h))) hariLibur++ })
+      const warnaHitungan = new Map<string, number>()
+      hariDlm.forEach(h => {
+        if (hariLiburSet.has(toDateStr(h))) {
+          hariLibur++
+          const w = warnaPerTanggal?.get(toDateStr(h))
+          if (w) warnaHitungan.set(w, (warnaHitungan.get(w) || 0) + 1)
+        }
+      })
       const efektifLembaga = hariLibur <= 2
+      // Warna yang dipakai = klasifikasi kegiatan yang paling banyak muncul di minggu ini.
+      let warnaKegiatan: string | undefined
+      let maxCount = 0
+      warnaHitungan.forEach((cnt, w) => { if (cnt > maxCount) { maxCount = cnt; warnaKegiatan = w } })
 
       let capacityJp = 0
       Object.keys(jpPerHari).forEach(k => {
@@ -321,7 +373,7 @@ function hitungMingguKapasitas(
       const tglRef = hariDlm[0]
       const bulanKey = `${tglRef.getFullYear()}-${String(tglRef.getMonth() + 1).padStart(2, '0')}`
       if (!hasil[bulanKey]) hasil[bulanKey] = []
-      hasil[bulanKey].push({ mingguKe: hasil[bulanKey].length + 1, efektifLembaga, capacityJp })
+      hasil[bulanKey].push({ mingguKe: hasil[bulanKey].length + 1, efektifLembaga, capacityJp, warnaKegiatan })
     }
     senin = addDays(senin, 7)
   }
@@ -329,9 +381,9 @@ function hitungMingguKapasitas(
   return hasil
 }
 
-type StatusMinggu = 'normal' | 'abu' | 'hitam'
+type StatusMinggu = 'normal' | 'abu' | 'hitam' | 'tidak-ada'
 function klasifikasiMinggu(w: MingguKapasitas | undefined): StatusMinggu {
-  if (!w) return 'normal'
+  if (!w) return 'tidak-ada'
   if (w.efektifLembaga) return 'normal'
   return w.capacityJp > 0 ? 'abu' : 'hitam'
 }
@@ -403,9 +455,13 @@ async function eksporProtaExcel(params: {
   const tulisSemester = (semester: 'ganjil' | 'genap', label: string, cap: number) => {
     const rs = rows.filter(r => r.semester === semester)
     let total = 0
-    rs.forEach((r, i) => {
+    rowsOut.push([label])
+    if (rs.length === 0) {
+      rowsOut.push(['', '', '', '(Belum ada Tujuan Pembelajaran untuk semester ini)', ''])
+    }
+    rs.forEach(r => {
       rowsOut.push([
-        i === 0 ? label : '',
+        '',
         r.elemen,
         r.materiNama,
         `${r.tpNomor ? r.tpNomor + ' - ' : ''}${r.tpDeskripsi}`,
@@ -413,8 +469,9 @@ async function eksporProtaExcel(params: {
       ])
       total += r.jp
     })
-    rowsOut.push(['', '', '', 'JUMLAH', total])
-    rowsOut.push(['', '', '', `Kapasitas Minggu Efektif`, cap])
+    rowsOut.push(['', '', '', `Jumlah Jam Total ${label}`, total])
+    rowsOut.push(['', '', '', 'Jumlah Jam Efektif', cap])
+    rowsOut.push(['', '', '', 'Jumlah Jam Cadangan', Math.max(0, cap - total)])
     rowsOut.push([])
   }
   tulisSemester('ganjil', 'Semester 1', capJpSem1)
@@ -513,9 +570,9 @@ async function eksporPromesExcel(params: {
 
   const jpCadangan = Math.max(0, capJpEfektif - totalDialokasikan)
   rowsOut.push([])
+  rowsOut.push(['', '', `Jumlah Jam Total Semester ${semLabel}`, capJpEfektif])
   rowsOut.push(['', '', 'Jumlah Jam Efektif', capJpEfektif])
   rowsOut.push(['', '', 'Jumlah Jam Cadangan', jpCadangan])
-  rowsOut.push(['', '', `Jumlah Jam Total Semester ${semLabel}`, capJpEfektif])
   rowsOut.push([])
   rowsOut.push([])
 
@@ -564,13 +621,13 @@ async function eksporProtaPDF(params: {
 
   doc.setLineWidth(1); doc.setDrawColor(0, 0, 0)
   doc.line(mL, curY, pageW - mR, curY); curY += 5
-  doc.setFontSize(14); doc.setFont('times', 'bold'); doc.setTextColor(15, 23, 42)
+  doc.setFontSize(15); doc.setFont('times', 'bold'); doc.setTextColor(15, 23, 42)
   doc.text('PROGRAM TAHUNAN', pageW / 2, curY, { align: 'center' }); curY += 6
-  doc.setFontSize(11)
+  doc.setFontSize(12)
   const namaSekolahLines = doc.splitTextToSize(profil.namaSekolah || 'Nama Satuan Pendidikan', contentWidth - 10)
   doc.text(namaSekolahLines, pageW / 2, curY, { align: 'center' }); curY += namaSekolahLines.length * 4.6 + 0.5
   if (profil.alamat) {
-    doc.setFont('times', 'normal'); doc.setFontSize(8); doc.setTextColor(71, 85, 105)
+    doc.setFont('times', 'normal'); doc.setFontSize(9.5); doc.setTextColor(71, 85, 105)
     const alamatLines = doc.splitTextToSize(profil.alamat, contentWidth - 10)
     doc.text(alamatLines, pageW / 2, curY, { align: 'center' }); curY += alamatLines.length * 3.6 + 1
   }
@@ -593,19 +650,31 @@ async function eksporProtaPDF(params: {
   const tulisSemester = (semester: 'ganjil' | 'genap', label: string, cap: number) => {
     const rs = rows.filter(r => r.semester === semester)
     let total = 0
-    rs.forEach((r, i) => {
+    if (rs.length === 0) {
       body.push([
-        i === 0 ? { content: label, styles: { fontStyle: 'bold', textColor: [106, 25, 125] as unknown as string } } : '',
-        r.elemen,
-        r.materiNama,
-        `${r.tpNomor ? r.tpNomor + ' - ' : ''}${r.tpDeskripsi}`,
-        `${r.jp} JP`,
+        { content: label, styles: { textColor: [106, 25, 125] as unknown as string } },
+        '', '',
+        { content: '(Belum ada Tujuan Pembelajaran untuk semester ini)', styles: { textColor: [148, 163, 184] as unknown as string } },
+        '',
       ])
+    }
+    rs.forEach((r, i) => {
+      const baris: Cell[] = i === 0
+        ? [{ content: label, rowSpan: rs.length, styles: { textColor: [106, 25, 125] as unknown as string, valign: 'middle' as unknown as string } } as Cell,
+           r.elemen, r.materiNama, `${r.tpNomor ? r.tpNomor + ' - ' : ''}${r.tpDeskripsi}`, `${r.jp} JP`]
+        : [r.elemen, r.materiNama, `${r.tpNomor ? r.tpNomor + ' - ' : ''}${r.tpDeskripsi}`, `${r.jp} JP`]
+      body.push(baris)
       total += r.jp
     })
     const over = total > cap
-    body.push(['', '', '', { content: 'JUMLAH', styles: { fontStyle: 'bold', halign: 'right' as unknown as string } },
-      { content: `${total} / ${cap} JP`, styles: { fontStyle: 'bold', textColor: (over ? [220, 38, 38] : [106, 25, 125]) as unknown as string } }])
+    const cadangan = Math.max(0, cap - total)
+    body.push(['', '', '', { content: `Jumlah Jam Total ${label}`, styles: { halign: 'right' as unknown as string } },
+      { content: `${total} JP`, styles: { textColor: (over ? [220, 38, 38] : [106, 25, 125]) as unknown as string } }])
+    body.push(['', '', '', { content: 'Jumlah Jam Efektif', styles: { halign: 'right' as unknown as string } },
+      { content: `${cap} JP`, styles: {} }])
+    body.push(['', '', '', { content: 'Jumlah Jam Cadangan', styles: { halign: 'right' as unknown as string } },
+      { content: `${cadangan} JP`, styles: {} }])
+    body.push(['', '', '', '', ''])
   }
   tulisSemester('ganjil', 'Semester 1', capJpSem1)
   tulisSemester('genap', 'Semester 2', capJpSem2)
@@ -619,10 +688,10 @@ async function eksporProtaPDF(params: {
     startY: curY,
     head: [['Semester', 'Elemen', 'Materi', 'Tujuan Pembelajaran', 'Alokasi Waktu (JP)']],
     body,
-    headStyles: { font: 'times', fillColor: [237, 227, 243], textColor: [30, 10, 40], fontStyle: 'bold', fontSize: 8, halign: 'center' },
-    bodyStyles: { font: 'times', fontSize: 7.5, valign: 'middle', overflow: 'linebreak' },
+    headStyles: { font: 'times', fillColor: [237, 227, 243], textColor: [30, 10, 40], fontStyle: 'bold', fontSize: 11, halign: 'center', cellPadding: 3, lineColor: [0, 0, 0], lineWidth: 0.15 },
+    bodyStyles: { font: 'times', fontSize: 10.5, valign: 'middle', overflow: 'linebreak', cellPadding: 2.8, lineColor: [0, 0, 0], lineWidth: 0.15 },
     columnStyles: {
-      0: { cellWidth: wSemester, fontStyle: 'bold', textColor: [106, 25, 125] as unknown as string },
+      0: { cellWidth: wSemester, textColor: [106, 25, 125] as unknown as string },
       1: { cellWidth: wElemen },
       2: { cellWidth: wMateri },
       3: { cellWidth: wTp },
@@ -633,7 +702,7 @@ async function eksporProtaPDF(params: {
     margin: { left: mL, right: mR },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     didDrawPage: (data: any) => {
-      doc.setFontSize(7); doc.setFont('times', 'italic'); doc.setTextColor(148, 163, 184)
+      doc.setFontSize(8.5); doc.setFont('times', 'italic'); doc.setTextColor(148, 163, 184)
       doc.text(`Program Tahunan — ${namaMapel} — ${namaKelas} — ${tahunAjaran}   |   Hal. ${data.pageNumber}`,
         pageW / 2, pageH - 6, { align: 'center' })
     },
@@ -669,9 +738,11 @@ async function eksporProtaPDF(params: {
   doc.text(`NUPTK: ${nuptk || '-'}`, ttdX2, ttdY + 39 + namaGuruLines.length * 4)
 
   if (mode === 'preview') {
-    return doc.output('bloburl') as unknown as string
+    const namaFile = `${namaFileAman(`Prota ${namaMapel} ${namaKelas} ${tahunAjaran}`)}.pdf`
+    const fileBernama = new File([doc.output('blob')], namaFile, { type: 'application/pdf' })
+    return URL.createObjectURL(fileBernama)
   }
-  doc.save(`Prota_${namaMapel}_${namaKelas}_${tahunAjaran.replace('/', '-')}.pdf`)
+  doc.save(`${namaFileAman(`Prota ${namaMapel} ${namaKelas} ${tahunAjaran}`)}.pdf`)
 }
 
 // ─── Ekspor PDF Promes ────────────────────────────────────────────────────────
@@ -720,20 +791,20 @@ async function eksporPromesPDF(params: {
   let curY = 12
   doc.setLineWidth(1); doc.setDrawColor(0, 0, 0)
   doc.line(mL, curY, pageW - mR, curY); curY += 4
-  doc.setFontSize(13); doc.setFont('times', 'bold'); doc.setTextColor(15, 23, 42)
+  doc.setFontSize(14); doc.setFont('times', 'bold'); doc.setTextColor(15, 23, 42)
   doc.text('PROGRAM SEMESTER', pageW / 2, curY, { align: 'center' }); curY += 5
-  doc.setFontSize(10)
+  doc.setFontSize(11)
   const namaSekolahLines = doc.splitTextToSize(profil.namaSekolah || 'Nama Satuan Pendidikan', contentWidth - 20)
   doc.text(namaSekolahLines, pageW / 2, curY, { align: 'center' }); curY += namaSekolahLines.length * 4 + 0.5
   if (profil.alamat) {
-    doc.setFont('times', 'normal'); doc.setFontSize(7.5); doc.setTextColor(71, 85, 105)
+    doc.setFont('times', 'normal'); doc.setFontSize(9); doc.setTextColor(71, 85, 105)
     const alamatLines = doc.splitTextToSize(profil.alamat, contentWidth - 20)
     doc.text(alamatLines, pageW / 2, curY, { align: 'center' }); curY += alamatLines.length * 3.3 + 1
   }
   doc.setLineWidth(0.5); doc.setDrawColor(0, 0, 0)
-  doc.line(mL, curY, pageW - mR, curY); curY += 3
+  doc.line(mL, curY, pageW - mR, curY); curY += 6.5
 
-  doc.setFont('times', 'bold'); doc.setFontSize(8); doc.setTextColor(15, 23, 42)
+  doc.setFont('times', 'bold'); doc.setFontSize(9.5); doc.setTextColor(15, 23, 42)
   const kolKananX = mL + contentWidth / 2
   const labelWPromes = 30
   const barisInfoPromes = (label: string, value: string, x: number, yy: number) => {
@@ -741,17 +812,25 @@ async function eksporPromesPDF(params: {
     doc.text(`: ${value}`, x + labelWPromes, yy)
   }
   barisInfoPromes('Mata Pelajaran', namaMapel, mL, curY)
-  barisInfoPromes('Kelas', namaKelas, kolKananX, curY); curY += 4
+  barisInfoPromes('Kelas', namaKelas, kolKananX, curY); curY += 5.5
   barisInfoPromes('Tahun Ajaran', tahunAjaran, mL, curY)
-  barisInfoPromes('Semester', semLabel, kolKananX, curY); curY += 4
-  barisInfoPromes('Alokasi Waktu', `${alokasiJpPerMinggu} jam/minggu`, mL, curY); curY += 4
+  barisInfoPromes('Semester', semLabel, kolKananX, curY); curY += 5.5
+  barisInfoPromes('Alokasi Waktu', `${alokasiJpPerMinggu} jam/minggu`, mL, curY); curY += 6
 
-  const headRow1 = ['No', 'Elemen/Materi', 'Tujuan Pembelajaran', 'Jml\n(JP)']
-  bulanList.forEach(bln => headRow1.push(bln, '', '', '', ''))
-  const headRow2 = ['', '', '', '']
+  type Cell = string | { content: string; colSpan?: number; rowSpan?: number; styles?: Record<string, unknown> }
+  const headRow1: Cell[] = [
+    { content: 'No', rowSpan: 2 },
+    { content: 'Elemen/Materi', rowSpan: 2 },
+    { content: 'Tujuan Pembelajaran', rowSpan: 2 },
+    { content: 'Jml\n(JP)', rowSpan: 2 },
+  ]
+  // Nama bulan digabung (colSpan:5) jadi SATU sel lebar membentang di atas
+  // 5 kolom minggunya -- BUKAN didorong ke satu kolom sempit tanpa
+  // penggabungan seperti sebelumnya (itu yang menyebabkan nama bulan
+  // terpaksa dibungkus huruf demi huruf ke bawah karena kolomnya sempit).
+  bulanList.forEach(bln => headRow1.push({ content: bln, colSpan: 5 }))
+  const headRow2: Cell[] = []
   bulanList.forEach(() => { for (let i = 1; i <= 5; i++) headRow2.push(String(i)) })
-
-  type Cell = string | { content: string; styles: Record<string, unknown> }
   const body: Cell[][] = []
   let no = 1
   let totalDialokasikan = 0
@@ -763,25 +842,58 @@ async function eksporPromesPDF(params: {
       const list = weeksByBulan[bulanKey] || []
       for (let m = 1; m <= 5; m++) {
         const w = list.find(x => x.mingguKe === m)
-        if (!w) { row.push(''); continue }
+        if (!w) {
+          // Minggu ini memang TIDAK ADA di bulan tsb (mis. bulan yang cuma
+          // punya 4 minggu efektif, kolom minggu ke-5 tidak ada tanggalnya
+          // sama sekali) -- hitamkan penuh, bukan dibiarkan putih kosong.
+          row.push({ content: '', styles: { fillColor: [20, 20, 20] as unknown as string } })
+          continue
+        }
         const status = klasifikasiMinggu(w)
         const jp = alokasiMingguan[r.id]?.[`${bulanKey}::${m}`] || 0
         totalDialokasikan += jp
-        const bg = status === 'hitam' ? [30, 30, 30] : status === 'abu' ? [203, 213, 225] : [255, 255, 255]
-        const fg = status === 'hitam' ? [255, 255, 255] : [15, 23, 42]
-        row.push({ content: jp > 0 ? String(jp) : '', styles: { fontStyle: 'bold', halign: 'center' as unknown as string, fillColor: bg as unknown as string, textColor: fg as unknown as string } })
+        // Minggu "abu" (tidak efektif utk lembaga, tapi masih ada jadwal
+        // mapel yg lolos) sekarang pakai warna KEGIATAN ASLI dari Kaldik
+        // (bukan abu-abu generik), supaya konsisten dengan kalender.
+        const bg = status === 'hitam' ? [30, 30, 30]
+          : status === 'abu' ? (w.warnaKegiatan ? hexKeRgb(w.warnaKegiatan) : [203, 213, 225])
+          : [255, 255, 255]
+        const fg = (status === 'hitam' || status === 'abu') ? [255, 255, 255] : [15, 23, 42]
+        row.push({ content: jp > 0 ? String(jp) : '', styles: { halign: 'center' as unknown as string, fillColor: bg as unknown as string, textColor: fg as unknown as string } })
       }
     })
     body.push(row)
   })
 
   const jpCadangan = Math.max(0, capJpEfektif - totalDialokasikan)
+  const nWeekCols = bulanList.length * 5
+
+  // Ringkasan Jumlah Jam dimasukkan sebagai BARIS TABEL (bukan teks lepas di
+  // bawah tabel) supaya sama persis dengan pola di Prota, urutan Total -> Efektif -> Cadangan.
+  // Kolom-kolom minggu di baris ini digabung jadi SATU sel hitam pekat (bukan
+  // dipisah-pisah kosong) karena baris ini memang tidak akan pernah diisi
+  // data per-minggu apapun.
+  const selKosongHitam = { content: '', colSpan: nWeekCols, styles: { fillColor: [20, 20, 20] as unknown as string } }
+  body.push([
+    { content: `Jumlah Jam Total ${semLabel}`, colSpan: 3, styles: { halign: 'right' as unknown as string, fontStyle: 'bold' as unknown as string } },
+    { content: String(totalDialokasikan), styles: { halign: 'center' as unknown as string, fontStyle: 'bold' as unknown as string, textColor: [106, 25, 125] as unknown as string } },
+    selKosongHitam,
+  ])
+  body.push([
+    { content: 'Jumlah Jam Efektif', colSpan: 3, styles: { halign: 'right' as unknown as string } },
+    { content: String(capJpEfektif), styles: { halign: 'center' as unknown as string } },
+    selKosongHitam,
+  ])
+  body.push([
+    { content: 'Jumlah Jam Cadangan', colSpan: 3, styles: { halign: 'right' as unknown as string } },
+    { content: String(jpCadangan), styles: { halign: 'center' as unknown as string } },
+    selKosongHitam,
+  ])
 
   // Lebar kolom dihitung persis dari contentWidth (bukan angka tetap sembarangan) supaya
   // TOTAL lebar tabel TIDAK PERNAH melebihi lebar halaman — sebelumnya kolom mingguan
   // (hingga 30 kolom × 8mm = 240mm) ditambah kolom tetap bisa jauh melebihi lebar
   // halaman landscape (±273mm), menyebabkan tabel terpotong / teks tumpang tindih.
-  const nWeekCols = bulanList.length * 5
   const wNo = 8, wElemen = 24, wJp = 9
   const wTpTarget = 45
   const remainingForWeeks = contentWidth - (wNo + wElemen + wJp + wTpTarget)
@@ -797,8 +909,8 @@ async function eksporPromesPDF(params: {
     startY: curY,
     head: [headRow1, headRow2],
     body,
-    headStyles: { font: 'times', fillColor: [237, 227, 243], textColor: [30, 10, 40], fontStyle: 'bold', fontSize: 6.5, halign: 'center', valign: 'middle' },
-    bodyStyles: { font: 'times', fontSize: 6.5, valign: 'middle', overflow: 'linebreak' },
+    headStyles: { font: 'times', fillColor: [237, 227, 243], textColor: [30, 10, 40], fontStyle: 'bold', fontSize: 9, halign: 'center', valign: 'middle', cellPadding: 2.3, lineColor: [0, 0, 0], lineWidth: 0.1 },
+    bodyStyles: { font: 'times', fontSize: 9, valign: 'middle', overflow: 'linebreak', cellPadding: 2.1, lineColor: [0, 0, 0], lineWidth: 0.1 },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     columnStyles: lebarKolom.reduce((acc: any, col, idx) => { acc[idx] = col; return acc }, {}),
     tableWidth: contentWidth,
@@ -806,7 +918,7 @@ async function eksporPromesPDF(params: {
     margin: { left: mL, right: mR },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     didDrawPage: (data: any) => {
-      doc.setFontSize(6); doc.setFont('times', 'italic'); doc.setTextColor(148, 163, 184)
+      doc.setFontSize(7.5); doc.setFont('times', 'italic'); doc.setTextColor(148, 163, 184)
       doc.text(`Program Semester ${semLabel} — ${namaMapel} — ${namaKelas} — ${tahunAjaran}   |   Hal. ${data.pageNumber}`,
         pageW / 2, pageH - 4, { align: 'center' })
     },
@@ -814,13 +926,8 @@ async function eksporPromesPDF(params: {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let afterTableY: number = (doc as any).lastAutoTable?.finalY || 160
-  afterTableY += 5
+  afterTableY += 8
   if (afterTableY + 30 > pageH - 55) { doc.addPage(); afterTableY = 15 }
-  doc.setFont('times', 'bold'); doc.setFontSize(8); doc.setTextColor(15, 23, 42)
-  doc.text(`Jumlah Jam Efektif       : ${capJpEfektif} JP`, mL, afterTableY); afterTableY += 5
-  doc.text(`Jumlah Jam Cadangan    : ${jpCadangan} JP`, mL, afterTableY); afterTableY += 5
-  doc.setTextColor(0, 0, 0)
-  doc.text(`Jumlah Jam Total Semester ${semLabel} : ${capJpEfektif} JP`, mL, afterTableY); afterTableY += 8
 
   if (afterTableY + 50 > pageH) { doc.addPage(); afterTableY = 15 }
   const titiMangsa = resolveTitiMangsa(profil)
@@ -828,30 +935,32 @@ async function eksporPromesPDF(params: {
 
   // Kepala Sekolah/Pimpinan ("Mengetahui") SELALU di KIRI, Guru Mapel di
   // KANAN -- titimangsa sejajar kolom KANAN (Guru). Tanpa garis TTD.
-  doc.setFont('times', 'normal'); doc.setFontSize(8.5); doc.setTextColor(15, 23, 42)
+  doc.setFont('times', 'normal'); doc.setFontSize(10); doc.setTextColor(15, 23, 42)
   doc.text('Mengetahui,', mL, afterTableY)
   doc.text('Kepala Sekolah / Pimpinan,', mL, afterTableY + 4)
-  doc.setFont('times', 'bold'); doc.setFontSize(8.5)
+  doc.setFont('times', 'bold'); doc.setFontSize(10)
   const namaKepalaLines = doc.splitTextToSize(profil.namaKepala || '(Nama Kepala Sekolah)', ttdColW)
   doc.text(namaKepalaLines, mL, afterTableY + 34)
-  doc.setFont('times', 'normal'); doc.setFontSize(8)
+  doc.setFont('times', 'normal'); doc.setFontSize(9.5)
   doc.text(`NUPTK: ${profil.nuptk || profil.nip || '-'}`, mL, afterTableY + 34 + namaKepalaLines.length * 4)
 
   const ttdX2 = pageW - mR - ttdColW
-  doc.setFontSize(8.5)
+  doc.setFontSize(10)
   const titiMangsaLines = doc.splitTextToSize(titiMangsa, ttdColW)
   doc.text(titiMangsaLines, ttdX2, afterTableY)
   doc.text('Guru Mata Pelajaran,', ttdX2, afterTableY + 4 + (titiMangsaLines.length - 1) * 4)
   doc.setFont('times', 'bold')
   const namaGuruLines = doc.splitTextToSize(namaGuru || '(Nama Guru)', ttdColW)
   doc.text(namaGuruLines, ttdX2, afterTableY + 34)
-  doc.setFont('times', 'normal'); doc.setFontSize(8)
+  doc.setFont('times', 'normal'); doc.setFontSize(9.5)
   doc.text(`NUPTK: ${nuptk || '-'}`, ttdX2, afterTableY + 34 + namaGuruLines.length * 4)
 
   if (mode === 'preview') {
-    return doc.output('bloburl') as unknown as string
+    const namaFile = `${namaFileAman(`Promes ${semLabel} ${namaMapel} ${namaKelas} ${tahunAjaran}`)}.pdf`
+    const fileBernama = new File([doc.output('blob')], namaFile, { type: 'application/pdf' })
+    return URL.createObjectURL(fileBernama)
   }
-  doc.save(`Promes_${semLabel}_${namaMapel}_${namaKelas}_${tahunAjaran.replace('/', '-')}.pdf`)
+  doc.save(`${namaFileAman(`Promes ${semLabel} ${namaMapel} ${namaKelas} ${tahunAjaran}`)}.pdf`)
 }
 
 // ─── KOMPONEN UTAMA ───────────────────────────────────────────────────────────
@@ -878,6 +987,7 @@ export default function ProtaPromesPage() {
   const [daftarJadwal, setDaftarJadwal] = useState<{ guruId: string; mapelId: string; rombelId: string; hari: string; waktuId: string }[]>([])
   const [daftarWaktu, setDaftarWaktu] = useState<{ id: string; jenis: string }[]>([])
   const [eventsKaldik, setEventsKaldik] = useState<KaldikEvent[]>([])
+  const [daftarKlasifikasiKaldik, setDaftarKlasifikasiKaldik] = useState<KlasifikasiAgenda[]>([])
 
   const [semesterGanjil, setSemesterGanjil] = useState<SemesterInfo>({
     id: 'ganjil', nama: 'Ganjil', tahunAjaran: '2024/2025',
@@ -944,6 +1054,8 @@ export default function ProtaPromesPage() {
 
       const sk = localStorage.getItem(kunciTahun('kaldik_agenda_list')) || localStorage.getItem(kunciTahun('data_kaldik_events'))
       if (sk) setEventsKaldik(JSON.parse(sk))
+      const skl = localStorage.getItem('kaldik_klasifikasi_list')
+      if (skl) setDaftarKlasifikasiKaldik(JSON.parse(skl))
 
       const sgs = localStorage.getItem(kunciTahun('setting_semester_ganjil')); if (sgs) setSemesterGanjil(JSON.parse(sgs))
       const sge = localStorage.getItem(kunciTahun('setting_semester_genap')); if (sge) setSemesterGenap(JSON.parse(sge))
@@ -1023,6 +1135,7 @@ export default function ProtaPromesPage() {
   // ── Derived data ──
 
   const hariLiburSet = useMemo(() => buildHariLiburSet(eventsKaldik), [eventsKaldik])
+  const warnaKegiatanPerTanggal = useMemo(() => buildWarnaKegiatanPerTanggal(eventsKaldik, daftarKlasifikasiKaldik), [eventsKaldik, daftarKlasifikasiKaldik])
 
   const guruTerpilih = daftarGuru.find(g => g.id === filterGuruId)
   const mapelTerpilih = daftarMapel.find(m => m.id === filterMapelId)
@@ -1121,7 +1234,7 @@ export default function ProtaPromesPage() {
   function buildDataPromes(semester: 'ganjil' | 'genap') {
     const semInfo = semester === 'ganjil' ? semesterGanjil : semesterGenap
     const bulanList = semester === 'ganjil' ? BULAN_SEM1 : BULAN_SEM2
-    const weeksByBulan = hitungMingguKapasitas(semInfo.tanggalMulai, semInfo.tanggalSelesai, hariLiburSet, jpPerHari)
+    const weeksByBulan = hitungMingguKapasitas(semInfo.tanggalMulai, semInfo.tanggalSelesai, hariLiburSet, jpPerHari, warnaKegiatanPerTanggal)
 
     const [a, b] = tahunAjaran.split('/')
     const tahunAwal = parseInt(a), tahunAkhir = parseInt(b)
@@ -1208,9 +1321,14 @@ export default function ProtaPromesPage() {
         : ''
 
     return (
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+        {filterGuruId && filterMapelId && filterRombelId && (
+          <p className="text-[10px] text-slate-600 mb-2">
+            <strong>Mata Pelajaran:</strong> {mapelTerpilih?.nama} &nbsp;|&nbsp; <strong>Kelas:</strong> {rombelTerpilih?.nama} &nbsp;|&nbsp; <strong>Semester:</strong> {semester === 'ganjil' ? '1 (Ganjil)' : '2 (Genap)'} &nbsp;|&nbsp; <strong>Tahun Ajaran:</strong> {tahunAjaran} &nbsp;|&nbsp; <strong>Guru:</strong> {guruTerpilih?.nama}
+          </p>
+        )}
         <table className="text-[9px] border-collapse w-full min-w-[900px]">
-          <thead>
+          <thead className="sticky top-0 z-10">
             <tr className="bg-[#4a1263] text-white">
               <th className="border border-[#4a1263] p-1.5 text-center" rowSpan={2}>No</th>
               <th className="border border-[#4a1263] p-1.5 text-center" rowSpan={2}>Elemen/Materi</th>
@@ -1247,11 +1365,12 @@ export default function ProtaPromesPage() {
                     const list = weeksByBulan[bulanKey] || []
                     return [1, 2, 3, 4, 5].map(m => {
                       const w = list.find(x => x.mingguKe === m)
-                      if (!w) return <td key={`${bln}-${m}`} className="border border-slate-200 p-1 bg-slate-50" />
+                      if (!w) return <td key={`${bln}-${m}`} className="border border-slate-200 p-1 bg-[#141414]" />
                       const status = klasifikasiMinggu(w)
                       const jp = alokasi[r.id]?.[`${bulanKey}::${m}`] || 0
+                      const gayaAbu = status === 'abu' && w.warnaKegiatan ? { backgroundColor: w.warnaKegiatan, color: '#fff' } : undefined
                       return (
-                        <td key={`${bln}-${m}`} className={`border border-slate-200 p-1 text-center font-bold ${warnaSel(status)}`}>
+                        <td key={`${bln}-${m}`} style={gayaAbu} className={`border border-slate-200 p-1 text-center font-bold ${!gayaAbu ? warnaSel(status) : ''}`}>
                           {jp > 0 ? jp : ''}
                         </td>
                       )
@@ -1262,6 +1381,10 @@ export default function ProtaPromesPage() {
             )}
           </tbody>
           <tfoot>
+            <tr className="bg-[#6A197D]/8 font-black text-[9px]">
+              <td colSpan={4} className="border border-slate-200 p-1.5 text-right text-[#5b1774]">Jumlah Jam Total Semester {semester === 'ganjil' ? 'Ganjil' : 'Genap'}</td>
+              <td colSpan={bulanList.length * 5} className="border border-slate-200 p-1.5 text-[#4a1263] text-xs">{capJpEfektif} JP</td>
+            </tr>
             <tr className="bg-slate-50 font-bold text-[9px]">
               <td colSpan={4} className="border border-slate-200 p-1.5 text-right">Jumlah Jam Efektif</td>
               <td colSpan={bulanList.length * 5} className="border border-slate-200 p-1.5 text-[#6A197D] font-black">{capJpEfektif} JP</td>
@@ -1269,10 +1392,6 @@ export default function ProtaPromesPage() {
             <tr className="bg-slate-50 font-bold text-[9px]">
               <td colSpan={4} className="border border-slate-200 p-1.5 text-right">Jumlah Jam Cadangan</td>
               <td colSpan={bulanList.length * 5} className="border border-slate-200 p-1.5 text-[#6A197D]">{jpCadangan} JP</td>
-            </tr>
-            <tr className="bg-[#6A197D]/8 font-black text-[9px]">
-              <td colSpan={4} className="border border-slate-200 p-1.5 text-right text-[#5b1774]">Jumlah Jam Total Semester {semester === 'ganjil' ? 'Ganjil' : 'Genap'}</td>
-              <td colSpan={bulanList.length * 5} className="border border-slate-200 p-1.5 text-[#4a1263] text-xs">{capJpEfektif} JP</td>
             </tr>
           </tfoot>
         </table>
@@ -1537,9 +1656,9 @@ export default function ProtaPromesPage() {
               </p>
             )}
 
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
               <table className="text-xs border-collapse w-full">
-                <thead>
+                <thead className="sticky top-0 z-10">
                   <tr className="bg-[#4a1263] text-white">
                     <th className="border border-[#4a1263] p-2 text-center w-10">No</th>
                     <th className="border border-[#4a1263] p-2 text-left w-32">Elemen</th>
@@ -1551,7 +1670,6 @@ export default function ProtaPromesPage() {
                 <tbody>
                   {(['ganjil', 'genap'] as const).map(sem => {
                     const rs = protaRowsFull.filter(r => r.semester === sem)
-                    if (rs.length === 0) return null
                     const total = sem === 'ganjil' ? totalJpTerisiSem1 : totalJpTerisiSem2
                     const cap = sem === 'ganjil' ? capJpSem1 : capJpSem2
                     const over = total > cap
@@ -1562,6 +1680,13 @@ export default function ProtaPromesPage() {
                             {sem === 'ganjil' ? 'Semester 1' : 'Semester 2'}
                           </td>
                         </tr>
+                        {rs.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="border border-slate-200 p-3 text-center text-slate-400 italic">
+                              Belum ada Tujuan Pembelajaran untuk semester ini — lengkapi dulu di modul CP, TP &amp; ATP.
+                            </td>
+                          </tr>
+                        )}
                         {rs.map((r, idx) => (
                           <tr key={r.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-[#6A197D]/10'}>
                             <td className="border border-slate-200 p-1.5 text-center">{idx + 1}</td>
@@ -1578,12 +1703,21 @@ export default function ProtaPromesPage() {
                         ))}
                         <tr className={`font-black text-xs ${over ? 'bg-rose-50' : 'bg-[#6A197D]/8'}`}>
                           <td colSpan={4} className={`border border-slate-200 p-2 text-right ${over ? 'text-rose-800' : 'text-[#5b1774]'}`}>
-                            JUMLAH {sem === 'ganjil' ? 'SEMESTER 1' : 'SEMESTER 2'}
+                            Jumlah Jam Total {sem === 'ganjil' ? 'Semester 1' : 'Semester 2'}
                           </td>
                           <td className={`border border-slate-200 p-2 text-center ${over ? 'text-rose-700' : 'text-[#4a1263]'}`}>
-                            {total} / {cap} JP
+                            {total} JP
                           </td>
                         </tr>
+                        <tr className="font-bold text-xs bg-slate-50">
+                          <td colSpan={4} className="border border-slate-200 p-2 text-right text-slate-600">Jumlah Jam Efektif</td>
+                          <td className="border border-slate-200 p-2 text-center text-slate-700">{cap} JP</td>
+                        </tr>
+                        <tr className="font-bold text-xs bg-slate-50">
+                          <td colSpan={4} className="border border-slate-200 p-2 text-right text-slate-600">Jumlah Jam Cadangan</td>
+                          <td className="border border-slate-200 p-2 text-center text-slate-700">{Math.max(0, cap - total)} JP</td>
+                        </tr>
+                        <tr><td colSpan={5} className="h-3 border-0"></td></tr>
                       </Fragment>
                     )
                   })}
@@ -1692,31 +1826,16 @@ export default function ProtaPromesPage() {
           </div>
 
           <fieldset disabled={!bolehEdit} className="p-6 border-0 m-0 min-w-0">
-            {filterGuruId && filterMapelId && filterRombelId && (
-              <div className="mb-4 p-4 border border-slate-200 rounded-xl bg-slate-50 text-[10px] space-y-1">
-                <div className="text-center font-black text-sm text-slate-800">
-                  {tabView === 'preview-prota' ? 'PROGRAM TAHUNAN' :
-                   tabView === 'preview-promes1' ? 'PROGRAM SEMESTER 1' : 'PROGRAM SEMESTER 2'}
-                </div>
-                <div className="text-center font-bold text-slate-700">{profil.namaSekolah}</div>
-                {profil.alamat && <div className="text-center text-slate-500">{profil.alamat}</div>}
-                <div className="border-t border-slate-300 mt-2 pt-2 grid grid-cols-2 gap-1">
-                  <span><strong>Mata Pelajaran :</strong> {mapelTerpilih?.nama}</span>
-                  <span><strong>Kelas :</strong> {rombelTerpilih?.nama}</span>
-                  <span><strong>Tahun Ajaran :</strong> {tahunAjaran}</span>
-                  <span><strong>Guru :</strong> {guruTerpilih?.nama}</span>
-                  {(tabView === 'preview-promes1' || tabView === 'preview-promes2') && (
-                    <span><strong>Alokasi :</strong> {alokasiJpPerMinggu} jam/minggu</span>
-                  )}
-                </div>
-              </div>
-            )}
-
             {/* Preview Prota */}
             {tabView === 'preview-prota' && (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                {filterGuruId && filterMapelId && filterRombelId && (
+                  <p className="text-[10px] text-slate-600 mb-2">
+                    <strong>Mata Pelajaran:</strong> {mapelTerpilih?.nama} &nbsp;|&nbsp; <strong>Kelas:</strong> {rombelTerpilih?.nama} &nbsp;|&nbsp; <strong>Tahun Ajaran:</strong> {tahunAjaran} &nbsp;|&nbsp; <strong>Guru:</strong> {guruTerpilih?.nama}
+                  </p>
+                )}
                 <table className="text-[9px] border-collapse w-full">
-                  <thead>
+                  <thead className="sticky top-0 z-10">
                     <tr className="bg-[#4a1263] text-white">
                       <th className="border border-[#4a1263] p-2 text-center">Semester</th>
                       <th className="border border-[#4a1263] p-2">Elemen</th>
@@ -1734,16 +1853,24 @@ export default function ProtaPromesPage() {
                       <>
                         {(['ganjil', 'genap'] as const).map(sem => {
                           const rs = protaRowsFull.filter(r => r.semester === sem)
-                          if (rs.length === 0) return null
                           const total = rs.reduce((a, r) => a + (r.jp || 0), 0)
                           const cap = sem === 'ganjil' ? capJpSem1 : capJpSem2
                           return (
                             <Fragment key={sem}>
+                              {rs.length === 0 && (
+                                <tr>
+                                  <td colSpan={5} className="border border-slate-200 p-3 text-center text-slate-400 italic">
+                                    {sem === 'ganjil' ? 'Semester 1' : 'Semester 2'}: belum ada Tujuan Pembelajaran untuk semester ini.
+                                  </td>
+                                </tr>
+                              )}
                               {rs.map((r, i) => (
                                 <tr key={r.id} className={i % 2 === 0 ? 'bg-white' : 'bg-[#6A197D]/10'}>
-                                  <td className="border border-slate-200 p-1.5 text-center font-bold text-[#6A197D]">
-                                    {i === 0 ? (sem === 'ganjil' ? 'Semester 1' : 'Semester 2') : ''}
-                                  </td>
+                                  {i === 0 && (
+                                    <td rowSpan={rs.length} className="border border-slate-200 p-1.5 text-center font-bold text-[#6A197D] align-middle">
+                                      {sem === 'ganjil' ? 'Semester 1' : 'Semester 2'}
+                                    </td>
+                                  )}
                                   <td className="border border-slate-200 p-1.5 font-semibold text-[#6A197D]">{r.elemen}</td>
                                   <td className="border border-slate-200 p-1.5">{r.materiNama}</td>
                                   <td className="border border-slate-200 p-1.5">{r.tpNomor ? `${r.tpNomor} — ` : ''}{r.tpDeskripsi}</td>
@@ -1752,12 +1879,21 @@ export default function ProtaPromesPage() {
                               ))}
                               <tr className="bg-[#6A197D]/8 font-black">
                                 <td colSpan={4} className="border border-slate-200 p-2 text-right text-[#5b1774]">
-                                  JUMLAH {sem === 'ganjil' ? 'SEMESTER 1' : 'SEMESTER 2'}
+                                  Jumlah Jam Total {sem === 'ganjil' ? 'Semester 1' : 'Semester 2'}
                                 </td>
                                 <td className={`border border-slate-200 p-2 text-center ${total > cap ? 'text-rose-700' : 'text-[#4a1263]'}`}>
-                                  {total} / {cap} JP
+                                  {total} JP
                                 </td>
                               </tr>
+                              <tr className="bg-slate-50">
+                                <td colSpan={4} className="border border-slate-200 p-2 text-right text-slate-600">Jumlah Jam Efektif</td>
+                                <td className="border border-slate-200 p-2 text-center text-slate-700">{cap} JP</td>
+                              </tr>
+                              <tr className="bg-slate-50">
+                                <td colSpan={4} className="border border-slate-200 p-2 text-right text-slate-600">Jumlah Jam Cadangan</td>
+                                <td className="border border-slate-200 p-2 text-center text-slate-700">{Math.max(0, cap - total)} JP</td>
+                              </tr>
+                              <tr><td colSpan={5} className="h-3 border-0"></td></tr>
                             </Fragment>
                           )
                         })}

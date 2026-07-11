@@ -57,7 +57,12 @@ export default function LoginPage() {
       // cloud saat halaman ini dibuka), lalu login sungguhan lewat Supabase
       // Auth memakai email tsb -- supaya sesi guru juga tervalidasi server,
       // bukan sekadar cek nama di browser.
-      const daftarGuru = JSON.parse(localStorage.getItem('master_guru') || '[]')
+      // Cari email guru di "guru_login_lookup" -- data MINIMAL (cuma nama +
+      // email, tanpa NIP/data lain) yang memang sengaja tetap bisa dibaca
+      // publik khusus untuk keperluan ini (lihat migrations/001_app_storage.sql).
+      // Data guru yang SESUNGGUHNYA lengkap (master_guru) sekarang wajib
+      // login dulu untuk bisa dibaca, demi keamanan.
+      const daftarGuru = JSON.parse(localStorage.getItem('guru_login_lookup') || '[]')
 
       const bersihkanNama = (str: string) => {
         return str

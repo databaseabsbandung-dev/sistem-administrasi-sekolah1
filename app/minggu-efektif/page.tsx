@@ -52,6 +52,12 @@ type ScopeLevel = 'pusat' | 'unit' | 'kelas'
  * sini supaya tidak salah tahun/terbalik seperti yang pernah terjadi
  * (mis. Tahun Ajaran 2026/2027 tapi tanggal masih tahun 2025).
  */
+// Bersihkan karakter yang tidak boleh ada di nama file (filesystem-unsafe),
+// tanpa mengubah huruf besar/kecil atau spasi -- nama file tetap mudah dibaca.
+function namaFileAman(s: string): string {
+  return s.replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim()
+}
+
 function peringatanTanggal(sem: SemesterInfo, jenis: 'ganjil' | 'genap', tahunAjaranAktif: string): string | null {
   if (!sem.tanggalMulai || !sem.tanggalSelesai) return 'Tanggal mulai/selesai belum diisi.'
   const mulai = new Date(sem.tanggalMulai)
@@ -721,12 +727,16 @@ export default function MingguEfektifPage() {
     return daftarGuru.filter((g: any) => (g.unitIds || []).includes(unitAcuanCakupan))
   }, [daftarGuru, unitAcuanCakupan])
 
-  // Mapel yang muncul di tab "Per Mapel/Guru" -- kalau login sebagai Guru,
-  // dibatasi hanya mapel yang benar-benar diampu (tidak semua mapel sekolah).
+  // Mapel yang muncul di tab "Per Mapel/Guru" HARUS mengikuti Guru yang
+  // dipilih di dropdown -- baik itu karena login sebagai akun Guru (terkunci
+  // otomatis) MAUPUN karena Admin memilih guru tertentu secara manual.
+  // Kalau belum ada guru dipilih sama sekali, tampilkan semua mapel.
   const daftarMapelSesuaiCakupan = useMemo(() => {
-    if (!cakupanGuru) return daftarMapel
-    return daftarMapel.filter((m: any) => cakupanGuru.mapelIds.includes(m.id))
-  }, [daftarMapel, cakupanGuru])
+    if (!filterGuruId) return daftarMapel
+    const guru = daftarGuru.find((g: any) => g.id === filterGuruId)
+    if (!guru?.mapelIds?.length) return daftarMapel
+    return daftarMapel.filter((m: any) => guru.mapelIds.includes(m.id))
+  }, [daftarMapel, daftarGuru, filterGuruId])
 
   // Kalau Unit cakupan diganti dan Guru/Kelas yang tadinya dipilih ternyata
   // bukan milik unit yang baru, kosongkan lagi supaya tidak salah data.
@@ -739,6 +749,15 @@ export default function MingguEfektifPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unitAcuanCakupan])
+
+  // Kalau Guru diganti dan Mapel yang tadinya dipilih ternyata bukan mapel
+  // yang diampu guru baru itu, kosongkan lagi supaya tidak salah data.
+  useEffect(() => {
+    if (filterMapelId && !daftarMapelSesuaiCakupan.some((m: any) => m.id === filterMapelId)) {
+      setFilterMapelId('')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterGuruId])
 
   // Auto-pilih unit/kelas pertama begitu datanya tersedia, supaya selector tidak kosong
   useEffect(() => {
@@ -796,6 +815,56 @@ export default function MingguEfektifPage() {
     if (!filterRombelId || !semesterSaatIni.tanggalMulai || !semesterSaatIni.tanggalSelesai) return null
     return hitungMingguEfektif(semesterSaatIni.tanggalMulai, semesterSaatIni.tanggalSelesai, liburSetMapel, kegiatanPerTglMapel)
   }, [filterRombelId, semesterSaatIni, liburSetMapel, kegiatanPerTglMapel])
+
+  // Distribusi Alokasi Waktu (bagian B) -- diambil dari data TP/ATP di modul
+  // CP, TP & ATP, disilangkan dengan JP yang SUDAH diisi guru di halaman Prota.
+  // Dipakai BERSAMA oleh tampilan di layar ini DAN hasil unduhan PDF, supaya
+  // keduanya selalu sinkron (satu sumber perhitungan, bukan dihitung dua kali).
+  // Fungsi bersama (BUKAN sekadar useMemo) supaya bisa dipanggil untuk semester
+  // APAPUN -- baik semester yang sedang aktif di layar, maupun semester lain
+  // saat tombol "PDF Ganjil/Genap" diklik (yang bisa berbeda dari tab yang
+  // sedang aktif). Dengan begini tampilan di layar dan hasil unduhan PDF
+  // dijamin memakai logika & sumber data yang PERSIS SAMA.
+  const hitungDistribusiTp = (mapelId: string, rombelId: string, semesterId: string) => {
+    if (!mapelId || !rombelId) return []
+    try {
+      const daftarTpRaw = localStorage.getItem(kunciTahun('data_tp'))
+      const daftarAtpRaw = localStorage.getItem(kunciTahun('data_atp'))
+      const daftarTpX = daftarTpRaw ? JSON.parse(daftarTpRaw) : []
+      const daftarAtpX = daftarAtpRaw ? JSON.parse(daftarAtpRaw) : []
+      const alokasiRaw = localStorage.getItem(`prota_alokasi_${mapelId}_${rombelId}`)
+      const alokasiMap = alokasiRaw ? JSON.parse(alokasiRaw) : {}
+
+      const rombelObj = daftarRombel.find((r: any) => r.id === rombelId)
+      const namaTingkatKelas = String(rombelObj?.tingkat || (rombelObj as any)?.kelas || rombelObj?.nama || '')
+        .toUpperCase().replace(/^KELAS\s+/, '')
+      const romawiMatch = namaTingkatKelas.match(/^(XII|XI|X|IX|VIII|VII|VI|V|IV|III|II|I)\b/)
+      const tingkatKelas = romawiMatch ? romawiMatch[1] : namaTingkatKelas
+
+      return daftarAtpX
+        .filter((a: any) => a.mapelId === mapelId && a.kelas === tingkatKelas && a.semester === semesterId)
+        .sort((x: any, y: any) => (x.urutanDiKelas || 0) - (y.urutanDiKelas || 0))
+        .map((a: any) => {
+          const tp = daftarTpX.find((t: any) => t.id === a.tpId)
+          return {
+            id: a.id,
+            nomor: tp?.nomor || '',
+            deskripsi: tp?.deskripsi || '(TP tidak ditemukan)',
+            jp: alokasiMap[a.id]?.jp || 0,
+          }
+        })
+    } catch {
+      return []
+    }
+  }
+
+  const distribusiTpMapel = useMemo(
+    () => hitungDistribusiTp(filterMapelId, filterRombelId, semesterAktif),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filterMapelId, filterRombelId, semesterAktif, daftarRombel]
+  )
+
+  const totalAlokasiTpMapel = distribusiTpMapel.reduce((s: number, tp: any) => s + (tp.jp || 0), 0)
 
   // Daftar hari mengajar (utk kombinasi Guru+Mapel+Rombel) diambil dari Jadwal Pelajaran —
   // dipakai HANYA untuk tahu di hari apa saja kelas ini mengajar mapel tsb.
@@ -898,39 +967,12 @@ export default function MingguEfektifPage() {
       : (unitDataTtd?.nama || namaSekolah)
 
     // --- Integrasi data TP dari CP, TP & ATP + alokasi JP yang sudah diisi
-    //     guru di halaman Prota — supaya guru TIDAK perlu isi ulang JP di
-    //     sini, cukup lihat hasilnya di PDF Analisis Alokasi Waktu.
-    let distribusiTp: { nomor: string; deskripsi: string; jp: number }[] = []
-    if (isMapelMode) {
-      try {
-        const daftarTpRaw = localStorage.getItem(kunciTahun('data_tp'))
-        const daftarAtpRaw = localStorage.getItem(kunciTahun('data_atp'))
-        const daftarTpX = daftarTpRaw ? JSON.parse(daftarTpRaw) : []
-        const daftarAtpX = daftarAtpRaw ? JSON.parse(daftarAtpRaw) : []
-        const alokasiRaw = localStorage.getItem(`prota_alokasi_${filterMapelId}_${filterRombelId}`)
-        const alokasiMap = alokasiRaw ? JSON.parse(alokasiRaw) : {}
-
-        const rombelObj = daftarRombel.find((r: any) => r.id === filterRombelId)
-        const namaTingkatKelas = String(rombelObj?.tingkat || rombelObj?.kelas || rombelObj?.nama || '')
-          .toUpperCase().replace(/^KELAS\s+/, '')
-        const romawiMatch = namaTingkatKelas.match(/^(XII|XI|X|IX|VIII|VII|VI|V|IV|III|II|I)\b/)
-        const tingkatKelas = romawiMatch ? romawiMatch[1] : namaTingkatKelas
-
-        distribusiTp = daftarAtpX
-          .filter((a: any) => a.mapelId === filterMapelId && a.kelas === tingkatKelas && a.semester === semester.id)
-          .sort((x: any, y: any) => (x.urutanDiKelas || 0) - (y.urutanDiKelas || 0))
-          .map((a: any) => {
-            const tp = daftarTpX.find((t: any) => t.id === a.tpId)
-            return {
-              nomor: tp?.nomor || '',
-              deskripsi: tp?.deskripsi || '(TP tidak ditemukan)',
-              jp: alokasiMap[a.id]?.jp || 0,
-            }
-          })
-      } catch {
-        distribusiTp = []
-      }
-    }
+    //     guru di halaman Prota — memakai fungsi bersama (hitungDistribusiTp)
+    //     yang SAMA PERSIS dengan yang menampilkan tabel "B. Distribusi
+    //     Alokasi Waktu" di layar, supaya PDF selalu sinkron dengan layar.
+    const distribusiTp = isMapelMode
+      ? hitungDistribusiTp(filterMapelId, filterRombelId, semester.id)
+      : []
 
     if (isMapelMode) {
       namaGuru = daftarGuru.find((g: any) => g.id === filterGuruId)?.nama || ''
@@ -986,7 +1028,9 @@ export default function MingguEfektifPage() {
         alert(`Gagal membuat PDF: ${pesan}`)
         return
       }
-      const blob = await res.blob()
+      const blobMentah = await res.blob()
+      const namaFile = `${namaFileAman(['Analisis Alokasi Waktu', isMapelMode ? namaMapelPdf : '', isMapelMode ? `Kelas ${namaRombelPdf}` : '', semester.nama, semester.tahunAjaran].filter(Boolean).join(' '))}.pdf`
+      const blob = new File([blobMentah], namaFile, { type: 'application/pdf' })
       const url = URL.createObjectURL(blob)
       if (aksi === 'preview') {
         if (previewRef.current) URL.revokeObjectURL(previewRef.current)
@@ -996,7 +1040,7 @@ export default function MingguEfektifPage() {
       }
       const a = document.createElement('a')
       a.href = url
-      a.download = `Alokasi_Waktu_${semester.nama}_${(semester.tahunAjaran || '').replace('/', '-')}.pdf`
+      a.download = namaFile
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -1006,7 +1050,7 @@ export default function MingguEfektifPage() {
     }
   }
 
-  if (loading || diizinkanAkses === null) return <div className="p-8 text-center font-semibold text-[#6A197D]">Memuat Modul Minggu Efektif...</div>
+  if (loading || diizinkanAkses === null) return <div className="p-8 text-center font-semibold text-[#6A197D]">Memuat Modul Analisis Alokasi Waktu...</div>
   if (diizinkanAkses === false) return null
 
   // ============================================================
@@ -1035,7 +1079,7 @@ export default function MingguEfektifPage() {
       {/* MAIN */}
       <main className="flex-1 p-8 overflow-y-auto max-w-6xl mx-auto space-y-8">
         <header className="space-y-1.5">
-          <h1 className="text-2xl font-black text-slate-900">Analisis Alokasi Waktu & Minggu Efektif</h1>
+          <h1 className="text-2xl font-black text-slate-900">Analisis Alokasi Waktu</h1>
           <p className="text-xs text-gray-500">Perhitungan otomatis berdasarkan data kalender pendidikan (Kaldik) dan jadwal pelajaran.</p>
         </header>
 

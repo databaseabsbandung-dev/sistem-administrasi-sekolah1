@@ -8,20 +8,27 @@ create table if not exists public.app_storage (
   updated_at  timestamptz not null default now()
 );
 
--- RLS: baca (SELECT) tetap dibuka untuk siapapun -- ini SENGAJA, karena
--- halaman login Guru perlu mencari email guru di data ini SEBELUM guru
--- tsb berhasil login (ayam-telur: butuh data untuk bisa login). Sesuai
--- arahan bahwa data sekolah ini tidak tergolong sangat rahasia.
+-- RLS: SEBELUMNYA seluruh isi tabel (SELECT) dibuka untuk siapapun supaya
+-- halaman login Guru bisa mencari data akun SEBELUM guru itu berhasil
+-- login. Setelah diaudit, ini terlalu longgar -- seluruh data sekolah
+-- (nama, NIP, jadwal, dst) jadi bisa dibaca siapapun di internet tanpa
+-- login sama sekali.
 --
--- Yang benar-benar ditutup adalah TULIS/UBAH/HAPUS -- wajib sudah login
--- (Admin atau Guru, karena akun Guru sekarang juga akun Supabase Auth asli,
--- lihat app/api/admin/buat-akun-guru/route.ts) supaya pengunjung anonim
--- tidak bisa merusak/menghapus data sekolah.
+-- PERBAIKAN: sekarang HANYA SATU key ("guru_login_lookup" -- isinya CUMA
+-- nama & email guru, tidak ada NIP/data lain) yang tetap terbuka publik,
+-- khusus untuk keperluan pencarian akun sebelum login. SEMUA key lain
+-- (master_guru yang sesungguhnya lengkap dengan NIP dkk, data jadwal,
+-- kaldik, dan seterusnya) WAJIB sudah login (Admin atau Guru) untuk bisa
+-- dibaca. Lihat app/page.tsx (alur login) dan app/peran/guru/page.tsx
+-- (yang menjaga key "guru_login_lookup" ini tetap sinkron dengan master_guru).
 alter table public.app_storage enable row level security;
 
 drop policy if exists "app_storage_select" on public.app_storage;
 create policy "app_storage_select" on public.app_storage
-  for select using (true);
+  for select using (
+    key = 'guru_login_lookup'
+    or auth.role() = 'authenticated'
+  );
 
 drop policy if exists "app_storage_insert" on public.app_storage;
 create policy "app_storage_insert" on public.app_storage
@@ -33,7 +40,16 @@ create policy "app_storage_update" on public.app_storage
 
 drop policy if exists "app_storage_delete" on public.app_storage;
 create policy "app_storage_delete" on public.app_storage
-  for delete using (auth.role() = 'authenticated');
+  for delete using (
+    auth.role() = 'authenticated'
+    -- PERKUAT KEAMANAN: HAPUS hanya boleh dilakukan akun yang BUKAN guru
+    -- (yaitu Admin) -- dicek di level DATABASE lewat penanda
+    -- user_metadata.role yang ditetapkan saat akun guru dibuat (lihat
+    -- app/api/admin/buat-akun-guru/route.ts), bukan cuma di kode aplikasi.
+    -- Jadi walau seorang guru mencoba memanggil API Supabase langsung lewat
+    -- luar aplikasi, database sendiri yang menolak percobaan hapus data.
+    and coalesce(auth.jwt() -> 'user_metadata' ->> 'role', '') <> 'guru'
+  );
 
 -- Aktifkan realtime -- dibungkus pengecekan supaya TIDAK ERROR walau
 -- tabel ini sudah pernah ditambahkan ke publication sebelumnya (ini yang

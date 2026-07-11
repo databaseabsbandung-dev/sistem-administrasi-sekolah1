@@ -91,6 +91,12 @@ const DIMENSI_PANCASILA = [
   'Mandiri', 'Bernalar Kritis', 'Kreatif'
 ]
 
+// Bersihkan karakter yang tidak boleh ada di nama file (filesystem-unsafe),
+// tanpa mengubah huruf besar/kecil atau spasi -- nama file tetap mudah dibaca.
+function namaFileAman(s: string): string {
+  return s.replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim()
+}
+
 const FASE_OPTIONS = ['A', 'B', 'C', 'D', 'E', 'F']
 
 /**
@@ -674,14 +680,14 @@ export default function CpTpAtpPage() {
       const namaLembagaCetak = filterUnitId ? (unitAtpTerpilih?.nama || namaSekolah) : (identitasAtp?.namaLembaga || namaSekolah || namaInduk || '')
 
       doc.setFont('times', 'bold')
-      doc.setFontSize(13)
+      doc.setFontSize(14)
       doc.text('ALUR TUJUAN PEMBELAJARAN', pageWidth / 2, y, { align: 'center' })
       y += 6
       doc.text(namaLembagaCetak.toUpperCase(), pageWidth / 2, y, { align: 'center' })
       y += 9
 
       doc.setFont('times', 'normal')
-      doc.setFontSize(10.5)
+      doc.setFontSize(11.5)
       const halfW = contentWidth / 2
       const labelW = 38 // lebar label tetap supaya titik dua selalu sejajar dalam 1 kolom
       const barisInfo = (label: string, value: string, x: number, yy: number) => {
@@ -713,11 +719,11 @@ export default function CpTpAtpPage() {
           if (i === 0) {
             body.push([
               leftTeks,
-              { content: middleTeks, styles: { fontStyle: 'bold' } },
-              { content: atpFullText, rowSpan: cp.length, styles: { fontStyle: 'bold', valign: 'top' } }
+              middleTeks,
+              { content: atpFullText, rowSpan: cp.length, styles: { valign: 'top' } }
             ])
           } else {
-            body.push([leftTeks, { content: middleTeks, styles: { fontStyle: 'bold' } }])
+            body.push([leftTeks, middleTeks])
           }
         })
       }
@@ -732,7 +738,7 @@ export default function CpTpAtpPage() {
         ]],
         body,
         theme: 'grid',
-        styles: { font: 'times', fontSize: 9.5, cellPadding: 2.2, lineColor: [0, 0, 0], lineWidth: 0.15, valign: 'top' },
+        styles: { font: 'times', fontSize: 11, cellPadding: 3, lineColor: [0, 0, 0], lineWidth: 0.15, valign: 'top' },
         headStyles: { fillColor: [237, 227, 243], textColor: [30, 10, 40], font: 'times', fontStyle: 'bold' },
         columnStyles: {
           0: { cellWidth: contentWidth / 3 },
@@ -755,36 +761,37 @@ export default function CpTpAtpPage() {
       const labelPenandatanganAtp = filterUnitId ? 'Kepala Sekolah' : 'Mudir'
 
       const ttdColWAtp = 60
-      doc.setFont('times', 'normal'); doc.setFontSize(9)
+      doc.setFont('times', 'normal'); doc.setFontSize(10.5)
       doc.text('Mengetahui,', marginLeft, ttdY)
       doc.text(`${labelPenandatanganAtp},`, marginLeft, ttdY + 5)
       doc.setFont('times', 'bold')
       const namaKsLines = doc.splitTextToSize(namaPenandatanganAtp || '(Nama)', ttdColWAtp)
       doc.text(namaKsLines, marginLeft, ttdY + 30)
       if (labelPenandatanganAtp !== 'Mudir') {
-        doc.setFont('times', 'normal'); doc.setFontSize(8)
+        doc.setFont('times', 'normal'); doc.setFontSize(9.5)
         doc.text(`NUPTK: ${nipPenandatanganAtp || '-'}`, marginLeft, ttdY + 30 + namaKsLines.length * 4)
       }
 
       const ttdX2Atp = pageWidth - marginRight - ttdColWAtp
       const titiMangsaAtp = titiMangsaAtpInput.trim() || new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
-      doc.setFont('times', 'normal'); doc.setFontSize(9)
+      doc.setFont('times', 'normal'); doc.setFontSize(10.5)
       doc.text(titiMangsaAtp, ttdX2Atp, ttdY)
       doc.text('Guru Mata Pelajaran,', ttdX2Atp, ttdY + 5)
       doc.setFont('times', 'bold')
       const namaGuruLinesAtp = doc.splitTextToSize(namaGuru || '(Nama Guru)', ttdColWAtp)
       doc.text(namaGuruLinesAtp, ttdX2Atp, ttdY + 30)
-      doc.setFont('times', 'normal'); doc.setFontSize(8)
+      doc.setFont('times', 'normal'); doc.setFontSize(9.5)
       doc.text(`NUPTK: ${daftarGuru.find(g => g.id === filterGuruId)?.nip || '-'}`, ttdX2Atp, ttdY + 30 + namaGuruLinesAtp.length * 4)
 
-      const namaMapelFile = (namaMapel || 'Mapel').replace(/[^a-z0-9]+/gi, '_')
       if (mode === 'preview') {
-        const url = doc.output('bloburl') as unknown as string
+        const namaFile = `${namaFileAman(`CP TP ATP ${namaMapel} Fase ${filterFase}`)}.pdf`
+        const fileBernama = new File([doc.output('blob')], namaFile, { type: 'application/pdf' })
+        const url = URL.createObjectURL(fileBernama)
         if (previewRef.current) URL.revokeObjectURL(previewRef.current)
         previewRef.current = url
         setPreviewUrl(url)
       } else {
-        doc.save(`ATP_${namaMapelFile}_Fase${filterFase}.pdf`)
+        doc.save(`${namaFileAman(`CP TP ATP ${namaMapel} Fase ${filterFase}`)}.pdf`)
       }
     } catch (e) {
       alert('Gagal membuat PDF: ' + String(e instanceof Error ? e.message : e) +
@@ -824,7 +831,7 @@ export default function CpTpAtpPage() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `CP-TP-ATP_${namaMapel}_Fase${filterFase}.xlsx`
+      a.download = `${namaFileAman(`CP TP ATP ${namaMapel} Fase ${filterFase}`)}.xlsx`
       a.click()
       URL.revokeObjectURL(url)
     } catch (e) {
@@ -1701,9 +1708,9 @@ export default function CpTpAtpPage() {
                           {totalTp} TP
                         </span>
                       </div>
-                      <div className="overflow-x-auto">
+                      <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
                         <table className="w-full text-[10px] border-collapse">
-                          <thead>
+                          <thead className="sticky top-0 z-10">
                             <tr className="bg-slate-50 text-slate-500 font-black uppercase tracking-wider">
                               <th className="p-2 border border-slate-200 text-center w-10">No</th>
                               <th className="p-2 border border-slate-200 text-center w-16">Kelas</th>
