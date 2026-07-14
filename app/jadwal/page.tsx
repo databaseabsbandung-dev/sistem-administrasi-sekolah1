@@ -586,7 +586,13 @@ function generatePrintHtml(p: {
         <tbody><tr>
           ${LIST_HARI.slice(0, 5).map(h => {
             const guruIdsPiket = getPiketGuruIdsHari(h)
-            const namaList = guruIdsPiket.map(gid => daftarGuru.find((g: any) => g.id === gid)?.nama || '-')
+            // PENTING: kalau id guru piket tidak ketemu di daftarGuru (mis. data guru
+            // sudah dihapus/berubah), JANGAN diganti '-' per orang -- itu bikin muncul
+            // baris "-" nyasar di antara nama guru yang valid. Cukup diabaikan/dilewati;
+            // sel kolom baru ditampilkan '-' kalau memang tidak ada guru piket sama sekali.
+            const namaList = guruIdsPiket
+              .map(gid => daftarGuru.find((g: any) => g.id === gid)?.nama)
+              .filter((n): n is string => !!n)
             return `<td style="padding:3px 5px;font-size:7.5px;border:1px solid #000;vertical-align:top">${namaList.map(n => `<div>${n}</div>`).join('') || '-'}</td>`
           }).join('')}
         </tr></tbody>
@@ -1365,6 +1371,37 @@ export default function JadwalPelajaranPage() {
     async function init() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { router.push('/'); return }
+
+      // PENTING -- perbaikan akar masalah "data jadwal/kaldik tiba-tiba kosong":
+      // kunciTahun() (lib/tahunAjaran.ts) menentukan tahun ajaran aktif dengan
+      // membaca localStorage['master_tahun_ajaran'] SECARA SINKRON, lalu jatuh
+      // ke id 'default' kalau kosong. Di sesi yang benar-benar baru (Incognito,
+      // perangkat baru, atau akun yang baru pertama kali login) localStorage itu
+      // masih KOSONG selagi lib/cloudSync.ts masih dalam proses mengambil
+      // datanya dari cloud -- akibatnya sempat terbaca 'default', dan semua
+      // data jadwal/kaldik (yang sebenarnya ADA, tersimpan di bawah id tahun
+      // ajaran yang benar) tampak hilang, meski data di database tidak pernah
+      // berubah/rusak sama sekali.
+      //
+      // Supaya halaman ini SELALU memakai tahun ajaran aktif yang benar
+      // sebelum membaca data apa pun, ambil dulu 'master_tahun_ajaran'
+      // LANGSUNG dari Supabase di sini (tidak menunggu/bergantung pada
+      // cloudSync), lalu isikan ke localStorage -- supaya setiap pemanggilan
+      // kunciTahun() setelah baris ini di seluruh halaman otomatis memakai
+      // nilai yang sudah pasti terbaru, bukan cache yang mungkin masih kosong.
+      try {
+        const { data: rowTa } = await supabase
+          .from('app_storage')
+          .select('value')
+          .eq('key', 'master_tahun_ajaran')
+          .maybeSingle()
+        if (rowTa?.value) {
+          JSON.parse(rowTa.value) // validasi dulu -- jangan timpa localStorage kalau datanya ternyata rusak/bukan JSON valid
+          localStorage.setItem('master_tahun_ajaran', rowTa.value)
+        }
+      } catch (e) {
+        console.warn('Gagal memuat master_tahun_ajaran langsung dari cloud, memakai cache localStorage (jika ada):', e)
+      }
 
       const load = (key: string, setter: (v: any) => void, fallback: any = []) => {
         const raw = localStorage.getItem(kunciAsli(key))
