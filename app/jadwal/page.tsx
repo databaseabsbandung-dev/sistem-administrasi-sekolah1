@@ -179,6 +179,33 @@ function generateKodeMapel(namaAsli: string): string {
 }
 
 // ============================================================
+// HELPER: BERSIHKAN NILAI TEKS YANG SEMPAT TERBUNGKUS JSON.stringify
+// ============================================================
+// Beberapa nilai (mis. semester aktif) disimpan ke localStorage lewat
+// fungsi save() yang SELALU membungkusnya dengan JSON.stringify. Kalau
+// suatu saat sempat tersimpan berlapis (JSON.stringify dipanggil lebih
+// dari sekali atas nilai yang sama), pembacaan satu kali JSON.parse saja
+// tidak cukup -- makanya di sini di-loop sampai tidak ada lagi lapisan
+// tanda kutip JSON yang tersisa. Dipakai sebagai jaring pengaman terakhir
+// juga di titik tampil (kop hasil unduhan), bukan cuma di titik baca awal.
+function bersihkanTeksTersimpan(raw: string): string {
+  let v = raw
+  for (let i = 0; i < 5; i++) {
+    if (typeof v !== 'string') break
+    const dipangkas = v.trim()
+    if (!(dipangkas.startsWith('"') && dipangkas.endsWith('"'))) break
+    try {
+      const hasil = JSON.parse(dipangkas)
+      if (typeof hasil !== 'string' || hasil === v) break
+      v = hasil
+    } catch {
+      break
+    }
+  }
+  return v
+}
+
+// ============================================================
 // HELPER: URUTKAN ROMBEL/KELAS SECARA NATURAL (1, 1A, 1B, 2, 3, ... 7, dst)
 // ============================================================
 function urutkanRombelKelas<T extends { nama?: string }>(list: T[]): T[] {
@@ -1452,8 +1479,14 @@ export default function JadwalPelajaranPage() {
         console.warn('Migrasi auto-isi kelas gabungan gagal:', e)
       }
 
+      // CATATAN: nilainya disimpan lewat save() yang selalu JSON.stringify --
+      // jadi harus dibersihkan balik saat dibaca, supaya "Ganjil" tidak ikut
+      // membawa tanda kutip literal (mis. jadi '"Ganjil"') saat tampil di
+      // kop hasil unduhan/cetak Jadwal Lembaga. Dipakai bersihkanTeksTersimpan
+      // (bukan JSON.parse polos) supaya tetap benar walau nilainya sempat
+      // tersimpan berlapis (dibungkus JSON.stringify lebih dari sekali).
       const storedSemester = localStorage.getItem(kunciTahun('jadwal_semester_aktif'))
-      if (storedSemester) setSemesterAktif(storedSemester)
+      if (storedSemester) setSemesterAktif(bersihkanTeksTersimpan(storedSemester))
 
       const storedTtd = localStorage.getItem(kunciTahun('jadwal_titimangsa_ttd'))
       if (storedTtd) setTtd(JSON.parse(storedTtd))
@@ -3013,7 +3046,10 @@ export default function JadwalPelajaranPage() {
 
     const html = generatePrintHtml({
       namaUnitTampil, alamat, logoKiri, logoKanan,
-      semester: semesterAktif, tahunAjaran: tahunAjaranAktif,
+      // Jaring pengaman terakhir: pastikan semester yang tampil di kop
+      // hasil unduhan tidak pernah membawa tanda kutip literal (mis.
+      // '"Ganjil"'), apa pun sumber/riwayat penyimpanan nilainya.
+      semester: bersihkanTeksTersimpan(semesterAktif), tahunAjaran: tahunAjaranAktif,
       rombelFiltered, allSlots: allSlotsUrut, hariList,
       daftarJadwal, daftarJadwalTetap, daftarJadwalGiliran,
       daftarGuru, daftarMapel, daftarRombel, daftarKelasGabungan, daftarTingkat,
@@ -4981,7 +5017,7 @@ export default function JadwalPelajaranPage() {
             </div>
 
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-[10px] text-slate-600 space-y-1">
-              <p><strong>Semester:</strong> {semesterAktif} <span className="text-slate-400">(diatur di Pengaturan Kelas)</span></p>
+              <p><strong>Semester:</strong> {bersihkanTeksTersimpan(semesterAktif)} <span className="text-slate-400">(diatur di Pengaturan Kelas)</span></p>
               <p><strong>Tahun Ajaran:</strong> {tahunAjaranAktif} <span className="text-slate-400">(diatur di Dashboard)</span></p>
             </div>
 
