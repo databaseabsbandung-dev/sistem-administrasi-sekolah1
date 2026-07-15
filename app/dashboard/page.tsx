@@ -85,7 +85,40 @@ export default function DashboardPage() {
         setLogoUtama(parsed.logo_utama || parsed.logo || '')
       }
 
-      const storedTa = localStorage.getItem('master_tahun_ajaran')
+      // PENTING -- perbaikan akar masalah "data jadwal/kaldik tiba-tiba
+      // hilang": sebelumnya, kalau localStorage['master_tahun_ajaran'] masih
+      // kosong (mis. sesi baru/Incognito, atau akun yang baru pertama kali
+      // login di perangkat itu -- localStorage-nya belum sempat tersinkron
+      // dari cloud oleh CloudSyncProvider), kode ini LANGSUNG membuat tahun
+      // ajaran baru dengan id acak ('ta-' + Date.now()) dan menyimpannya --
+      // padahal tahun ajaran yang benar BISA JADI SUDAH ADA di cloud, cuma
+      // belum sempat sampai ke localStorage. Karena data ini dipakai
+      // BERSAMA oleh semua pengguna, begitu tertimpa tahun ajaran "kosong"
+      // yang baru dibuat ini, jadwal & kaldik yang sebenarnya masih ada jadi
+      // tampak hilang bagi SEMUA orang, bukan cuma di sesi yang baru itu.
+      //
+      // Perbaikannya: sebelum menyimpulkan localStorage benar-benar kosong,
+      // cek dulu LANGSUNG ke Supabase apakah tahun ajaran sudah pernah
+      // dibuat sebelumnya. Tahun ajaran default baru dibuat kalau di cloud
+      // pun memang belum ada sama sekali (mis. benar-benar instalasi baru).
+      let storedTa = localStorage.getItem('master_tahun_ajaran')
+      if (!storedTa) {
+        try {
+          const { data: rowTa } = await supabase
+            .from('app_storage')
+            .select('value')
+            .eq('key', 'master_tahun_ajaran')
+            .maybeSingle()
+          if (rowTa?.value) {
+            JSON.parse(rowTa.value) // validasi dulu -- jangan dipakai kalau ternyata rusak/bukan JSON valid
+            storedTa = rowTa.value
+            localStorage.setItem('master_tahun_ajaran', storedTa)
+          }
+        } catch (e) {
+          console.warn('Gagal memuat master_tahun_ajaran langsung dari cloud, memakai cache localStorage (jika ada):', e)
+        }
+      }
+
       if (storedTa) {
          setDaftarTa(JSON.parse(storedTa))
       } else {
