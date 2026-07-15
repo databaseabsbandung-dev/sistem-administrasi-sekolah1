@@ -760,28 +760,32 @@ export default function CpTpAtpPage() {
       const nipPenandatanganAtp = filterUnitId ? (unitAtpTerpilih?.nipKepala || '') : '' // Mudir tanpa NUPTK
       const labelPenandatanganAtp = filterUnitId ? 'Kepala Sekolah' : 'Mudir'
 
+      // Blok KIRI (Kepala Sekolah/Mudir) tetap di sisi KIRI, blok KANAN (Guru
+      // Mapel) tetap di sisi KANAN -- tapi teks di dalam masing-masing kolom
+      // rata TENGAH terhadap lebar kolomnya sendiri, bukan rata kiri/kanan mentah.
       const ttdColWAtp = 60
+      const ttdKiriTengahAtp = marginLeft + ttdColWAtp / 2
       doc.setFont('times', 'normal'); doc.setFontSize(10.5)
-      doc.text('Mengetahui,', marginLeft, ttdY)
-      doc.text(`${labelPenandatanganAtp},`, marginLeft, ttdY + 5)
+      doc.text('Mengetahui,', ttdKiriTengahAtp, ttdY, { align: 'center' })
+      doc.text(`${labelPenandatanganAtp},`, ttdKiriTengahAtp, ttdY + 5, { align: 'center' })
       doc.setFont('times', 'bold')
       const namaKsLines = doc.splitTextToSize(namaPenandatanganAtp || '(Nama)', ttdColWAtp)
-      doc.text(namaKsLines, marginLeft, ttdY + 30)
+      doc.text(namaKsLines, ttdKiriTengahAtp, ttdY + 30, { align: 'center' })
       if (labelPenandatanganAtp !== 'Mudir') {
         doc.setFont('times', 'normal'); doc.setFontSize(9.5)
-        doc.text(`NUPTK: ${nipPenandatanganAtp || '-'}`, marginLeft, ttdY + 30 + namaKsLines.length * 4)
+        doc.text(`NUPTK: ${nipPenandatanganAtp || '-'}`, ttdKiriTengahAtp, ttdY + 30 + namaKsLines.length * 4, { align: 'center' })
       }
 
-      const ttdX2Atp = pageWidth - marginRight - ttdColWAtp
+      const ttdKananTengahAtp = pageWidth - marginRight - ttdColWAtp / 2
       const titiMangsaAtp = titiMangsaAtpInput.trim() || new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
       doc.setFont('times', 'normal'); doc.setFontSize(10.5)
-      doc.text(titiMangsaAtp, ttdX2Atp, ttdY)
-      doc.text('Guru Mata Pelajaran,', ttdX2Atp, ttdY + 5)
+      doc.text(titiMangsaAtp, ttdKananTengahAtp, ttdY, { align: 'center' })
+      doc.text('Guru Mata Pelajaran,', ttdKananTengahAtp, ttdY + 5, { align: 'center' })
       doc.setFont('times', 'bold')
       const namaGuruLinesAtp = doc.splitTextToSize(namaGuru || '(Nama Guru)', ttdColWAtp)
-      doc.text(namaGuruLinesAtp, ttdX2Atp, ttdY + 30)
+      doc.text(namaGuruLinesAtp, ttdKananTengahAtp, ttdY + 30, { align: 'center' })
       doc.setFont('times', 'normal'); doc.setFontSize(9.5)
-      doc.text(`NUPTK: ${daftarGuru.find(g => g.id === filterGuruId)?.nip || '-'}`, ttdX2Atp, ttdY + 30 + namaGuruLinesAtp.length * 4)
+      doc.text(`NUPTK: ${daftarGuru.find(g => g.id === filterGuruId)?.nip || '-'}`, ttdKananTengahAtp, ttdY + 30 + namaGuruLinesAtp.length * 4, { align: 'center' })
 
       if (mode === 'preview') {
         const namaFile = `${namaFileAman(`CP TP ATP ${namaMapel} Fase ${filterFase}`)}.pdf`

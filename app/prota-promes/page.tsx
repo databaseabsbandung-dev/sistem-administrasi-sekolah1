@@ -138,6 +138,8 @@ interface KaldikEvent {
   keterangan: string
   statusHari: string
   lembagaTerlibat?: string[]
+  tingkatTerlibat?: string[]
+  rombelTerlibat?: string[]
   tanggalMulai?: string
   nama?: string
   kategoriKlasifikasi?: string
@@ -218,47 +220,6 @@ function ambilTingkatDariRombel(r: Rombel | undefined): string {
   return nama
 }
 
-/** Hitung jumlah minggu EFEKTIF (institusional, ≤2 hari libur Sen-Jum) per bulan dalam satu semester.
- *  Ini adalah kapasitas resmi ala halaman Minggu Efektif — dipakai sebagai batas atas (cap)
- *  pengisian JP di Prota. */
-function hitungMingguEfektifPerBulan(
-  tanggalMulai: string,
-  tanggalSelesai: string,
-  hariLiburSet: Set<string>,
-): Record<string, number> {
-  const mulai = parseDate(tanggalMulai)
-  const selesai = parseDate(tanggalSelesai)
-  const result: Record<string, number> = {}
-
-  let senin = new Date(mulai)
-  const dow = senin.getDay()
-  const offset = dow === 0 ? -6 : 1 - dow
-  senin = addDays(senin, offset)
-
-  while (senin <= selesai) {
-    let hariLibur = 0
-    const hariDlm: Date[] = []
-    for (let i = 0; i < 5; i++) {
-      const h = addDays(senin, i)
-      if (h >= mulai && h <= selesai) hariDlm.push(h)
-    }
-    hariDlm.forEach(h => {
-      if (hariLiburSet.has(toDateStr(h))) hariLibur++
-    })
-
-    const efektif = hariLibur <= 2
-    if (efektif && hariDlm.length > 0) {
-      const tglRef = hariDlm[0]
-      const key = `${tglRef.getFullYear()}-${String(tglRef.getMonth() + 1).padStart(2, '0')}`
-      result[key] = (result[key] || 0) + 1
-    }
-
-    senin = addDays(senin, 7)
-  }
-
-  return result
-}
-
 /** Hitung total JP untuk guru-mapel-rombel dari matriks alokasi (fallback jika Jadwal kosong) */
 /** Ubah warna hex (mis. "#dc2626") jadi array RGB [r,g,b] yang dipakai jsPDF. */
 function hexKeRgb(hex: string): number[] {
@@ -278,10 +239,30 @@ function hitungTotalJp(strAlokasi: string): number {
     .reduce((a, b) => a + b, 0)
 }
 
-/** Bangun set hari libur dari events kaldik */
+// Event kaldik berlaku untuk kelas/rombel tsb? SAMA PERSIS logikanya dengan
+// halaman Minggu Efektif (agendaBerlakuUntukScope, scope 'kelas') -- event
+// WAJIB menyertakan unit kelas ini di lembagaTerlibat, dan kalau event
+// menargetkan rombel/tingkat tertentu, kelas lain di luar target itu tidak
+// terdampak. Dipakai supaya JP efektif Prota/Promes SAMA PERSIS dengan
+// Analisis Alokasi Waktu, bukan ikut kegiatan yang sebetulnya milik kelas lain.
+function agendaBerlakuUntukKelas(ev: KaldikEvent, unitId: string, rombel?: { id: string; tingkatId: string }): boolean {
+  if (!ev.lembagaTerlibat?.includes(unitId)) return false
+  if (ev.rombelTerlibat && ev.rombelTerlibat.length > 0) {
+    return rombel ? ev.rombelTerlibat.includes(rombel.id) : false
+  }
+  if (ev.tingkatTerlibat && ev.tingkatTerlibat.length > 0) {
+    return rombel ? ev.tingkatTerlibat.includes(rombel.tingkatId) : false
+  }
+  return true
+}
+
+/** Bangun set hari libur dari events kaldik -- HANYA yang berstatus 'libur'
+ *  (event berstatus 'efektif', mis. Ujian/MPLS yang tetap ada KBM, TIDAK
+ *  mengurangi hari efektif), sama seperti aturan di halaman Minggu Efektif. */
 function buildHariLiburSet(events: KaldikEvent[]): Set<string> {
   const set = new Set<string>()
   events.forEach(ev => {
+    if (ev.statusHari !== 'libur') return
     const mulai = ev.tanggalMulai || ev.tanggal
     const selesai = ev.tanggalSelesai || mulai
     if (!mulai) return
@@ -615,68 +596,76 @@ async function eksporProtaPDF(params: {
   const { default: autoTable } = await import('jspdf-autotable')
   const { profil, namaGuru, nuptk, namaMapel, namaKelas, tahunAjaran, rows, capJpSem1, capJpSem2, mode = 'unduh', sematkanTtd = true } = params
 
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   const pageW = doc.internal.pageSize.width
   const pageH = doc.internal.pageSize.height
   const mL = 16, mR = 16
   const contentWidth = pageW - mL - mR
-  let curY = 14
+  let curY = 16
 
-  doc.setLineWidth(1); doc.setDrawColor(0, 0, 0)
-  doc.line(mL, curY, pageW - mR, curY); curY += 5
-  doc.setFontSize(15); doc.setFont('times', 'bold'); doc.setTextColor(15, 23, 42)
-  doc.text('PROGRAM TAHUNAN', pageW / 2, curY, { align: 'center' }); curY += 6
-  doc.setFontSize(12)
-  const namaSekolahLines = doc.splitTextToSize(profil.namaSekolah || 'Nama Satuan Pendidikan', contentWidth - 10)
-  doc.text(namaSekolahLines, pageW / 2, curY, { align: 'center' }); curY += namaSekolahLines.length * 4.6 + 0.5
-  if (profil.alamat) {
-    doc.setFont('times', 'normal'); doc.setFontSize(9.5); doc.setTextColor(71, 85, 105)
-    const alamatLines = doc.splitTextToSize(profil.alamat, contentWidth - 10)
-    doc.text(alamatLines, pageW / 2, curY, { align: 'center' }); curY += alamatLines.length * 3.6 + 1
+  // ── JUDUL & IDENTITAS ── format disamakan dengan halaman Analisis Alokasi
+  // Waktu: judul tebal rata tengah, lalu baris identitas "Label : Value",
+  // ditutup satu garis pemisah -- tanpa kop nama sekolah besar/alamat terpisah.
+  doc.setFontSize(13); doc.setFont('times', 'bold'); doc.setTextColor(15, 23, 42)
+  doc.text('PROGRAM TAHUNAN', pageW / 2, curY, { align: 'center' }); curY += 8
+
+  doc.setFont('times', 'normal'); doc.setFontSize(10); doc.setTextColor(15, 23, 42)
+  const labelWProta = 44
+  const barisIdentitasProta = (label: string, value: string) => {
+    doc.text(label, mL, curY)
+    const lines = doc.splitTextToSize(`: ${value || ''}`, contentWidth - labelWProta)
+    doc.text(lines, mL + labelWProta, curY)
+    curY += lines.length * 4.6
   }
+  barisIdentitasProta('Satuan Pendidikan', profil.namaSekolah || '')
+  barisIdentitasProta('Mata Pelajaran', namaMapel)
+  barisIdentitasProta('Kelas / Rombel', namaKelas)
+  barisIdentitasProta('Tahun Ajaran', tahunAjaran)
+  barisIdentitasProta('Guru Mata Pelajaran', namaGuru)
+  curY += 3
+
   doc.setLineWidth(0.5); doc.setDrawColor(0, 0, 0)
   doc.line(mL, curY, pageW - mR, curY); curY += 5
-
-  doc.setFont('times', 'normal'); doc.setFontSize(9); doc.setTextColor(15, 23, 42)
-  const labelWProta = 34
-  ;[['Mata Pelajaran', namaMapel], ['Kelas / Rombel', namaKelas], ['Tahun Ajaran', tahunAjaran]]
-    .forEach(([label, value]) => {
-      doc.text(label, mL, curY)
-      const lines = doc.splitTextToSize(`: ${value}`, contentWidth - labelWProta)
-      doc.text(lines, mL + labelWProta, curY)
-      curY += lines.length * 4.5
-    })
-  curY += 2
 
   type Cell = string | { content: string; styles: Record<string, unknown> }
   const body: Cell[][] = []
   const tulisSemester = (semester: 'ganjil' | 'genap', label: string, cap: number) => {
     const rs = rows.filter(r => r.semester === semester)
     let total = 0
+    // Sel "Semester X" digabung (rowSpan) mencakup SEMUA baris TP semester ini
+    // DITAMBAH 3 baris ringkasan di bawahnya (Jumlah Jam Total/Efektif/Cadangan)
+    // -- jadi satu blok utuh sampai baris Jumlah Jam Cadangan, bukan cuma
+    // menaungi baris-baris TP saja.
+    const totalBarisSemester = Math.max(rs.length, 1) + 3
     if (rs.length === 0) {
       body.push([
-        { content: label, styles: { textColor: [106, 25, 125] as unknown as string } },
+        { content: label, rowSpan: totalBarisSemester, styles: { textColor: [0, 0, 0] as unknown as string, valign: 'middle' as unknown as string } } as Cell,
         '', '',
-        { content: '(Belum ada Tujuan Pembelajaran untuk semester ini)', styles: { textColor: [148, 163, 184] as unknown as string } },
+        { content: '(Belum ada Tujuan Pembelajaran untuk semester ini)', styles: { textColor: [0, 0, 0] as unknown as string } },
         '',
       ])
     }
     rs.forEach((r, i) => {
       const baris: Cell[] = i === 0
-        ? [{ content: label, rowSpan: rs.length, styles: { textColor: [106, 25, 125] as unknown as string, valign: 'middle' as unknown as string } } as Cell,
+        ? [{ content: label, rowSpan: totalBarisSemester, styles: { textColor: [0, 0, 0] as unknown as string, valign: 'middle' as unknown as string } } as Cell,
            r.elemen, r.materiNama, `${r.tpNomor ? r.tpNomor + ' - ' : ''}${r.tpDeskripsi}`, `${r.jp} JP`]
         : [r.elemen, r.materiNama, `${r.tpNomor ? r.tpNomor + ' - ' : ''}${r.tpDeskripsi}`, `${r.jp} JP`]
       body.push(baris)
       total += r.jp
     })
-    const over = total > cap
     const cadangan = Math.max(0, cap - total)
-    body.push(['', '', '', { content: `Jumlah Jam Total ${label}`, styles: { halign: 'right' as unknown as string } },
-      { content: `${total} JP`, styles: { textColor: (over ? [220, 38, 38] : [106, 25, 125]) as unknown as string } }])
-    body.push(['', '', '', { content: 'Jumlah Jam Efektif', styles: { halign: 'right' as unknown as string } },
+    // Kolom "Semester" DIHILANGKAN dari array baris-baris ini (bukan diisi '')
+    // karena sudah tercakup rowSpan sel "Semester X" di atas -- persis pola yang
+    // dipakai baris TP ke-2 dst (lihat `baris` di atas).
+    body.push(['', '', { content: `Jumlah Jam Total ${label}`, styles: { halign: 'right' as unknown as string } },
+      { content: `${total} JP`, styles: { textColor: [0, 0, 0] as unknown as string } }])
+    body.push(['', '', { content: 'Jumlah Jam Efektif', styles: { halign: 'right' as unknown as string } },
       { content: `${cap} JP`, styles: {} }])
-    body.push(['', '', '', { content: 'Jumlah Jam Cadangan', styles: { halign: 'right' as unknown as string } },
+    body.push(['', '', { content: 'Jumlah Jam Cadangan', styles: { halign: 'right' as unknown as string } },
       { content: `${cadangan} JP`, styles: {} }])
+    // Baris kosong pemisah antar-semester -- di LUAR rowSpan "Semester X" (yang
+    // berhenti tepat di baris Jumlah Jam Cadangan), jadi kolom Semester tetap
+    // diisi '' seperti biasa (bukan dihilangkan) di baris ini.
     body.push(['', '', '', '', ''])
   }
   tulisSemester('ganjil', 'Semester 1', capJpSem1)
@@ -684,24 +673,28 @@ async function eksporProtaPDF(params: {
 
   // Lebar kolom dihitung persis dari contentWidth supaya tabel TIDAK PERNAH melebihi
   // lebar halaman (penyebab teks tumpang tindih / terpotong pada cetakan sebelumnya).
-  const wSemester = 16, wElemen = 24, wMateri = 24, wJp = 20
+  // Semester & Alokasi Waktu (JP) dilebarkan supaya kata-katanya tidak terpenggal.
+  const wSemester = 30, wElemen = 24, wMateri = 24, wJp = 30
   const wTp = contentWidth - (wSemester + wElemen + wMateri + wJp)
 
   autoTable(doc, {
     startY: curY,
+    // theme 'plain' MATIKAN zebra-stripe bawaan jspdf-autotable (theme default
+    // 'striped' tetap memberi warna selang-seling walau bodyStyles.fillColor
+    // sudah diisi putih) -- badan tabel putih polos, ungu HANYA di header.
+    theme: 'plain',
     head: [['Semester', 'Elemen', 'Materi', 'Tujuan Pembelajaran', 'Alokasi Waktu (JP)']],
     body,
-    headStyles: { font: 'times', fillColor: [237, 227, 243], textColor: [30, 10, 40], fontStyle: 'bold', fontSize: 14, halign: 'center', cellPadding: 3.5, lineColor: [0, 0, 0], lineWidth: 0.15 },
-    bodyStyles: { font: 'times', fontSize: 12, valign: 'middle', overflow: 'linebreak', cellPadding: 3.2, lineColor: [0, 0, 0], lineWidth: 0.15 },
+    headStyles: { font: 'times', fillColor: [237, 227, 243], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 14, halign: 'center', valign: 'middle', cellPadding: 3.5, lineColor: [0, 0, 0], lineWidth: 0.15 },
+    bodyStyles: { font: 'times', fontSize: 12, valign: 'middle', overflow: 'linebreak', cellPadding: 3.2, lineColor: [0, 0, 0], lineWidth: 0.15, textColor: [0, 0, 0], fillColor: [255, 255, 255] },
     columnStyles: {
-      0: { cellWidth: wSemester, textColor: [106, 25, 125] as unknown as string },
+      0: { cellWidth: wSemester, textColor: [0, 0, 0] as unknown as string },
       1: { cellWidth: wElemen },
       2: { cellWidth: wMateri },
       3: { cellWidth: wTp },
       4: { cellWidth: wJp, halign: 'center' },
     },
     tableWidth: contentWidth,
-    alternateRowStyles: { fillColor: [250, 240, 253] },
     margin: { left: mL, right: mR },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     didDrawPage: (data: any) => {
@@ -718,33 +711,36 @@ async function eksporProtaPDF(params: {
   const titiMangsa = resolveTitiMangsa(profil)
   const ttdColW = 60
 
-  // Kepala Sekolah/Pimpinan ("Mengetahui") SELALU di KIRI, Guru Mapel di
-  // KANAN -- titimangsa sejajar dengan kolom KANAN (Guru). Tanpa garis TTD.
+  // Blok KIRI (Kepala Sekolah/Pimpinan) tetap di sisi KIRI halaman, blok KANAN
+  // (Guru Mapel) tetap di sisi KANAN -- tapi teks di dalam masing-masing kolom
+  // rata TENGAH (center) terhadap lebar kolomnya sendiri, bukan rata kiri/kanan
+  // mentah, supaya blok tanda tangan terlihat rapi di tengah "ruang"-nya.
+  const ttdKiriTengah = mL + ttdColW / 2
   doc.setFont('times', 'normal'); doc.setFontSize(9); doc.setTextColor(15, 23, 42)
-  doc.text('Mengetahui,', mL, ttdY)
-  doc.text('Kepala Sekolah / Pimpinan,', mL, ttdY + 5)
+  doc.text('Mengetahui,', ttdKiriTengah, ttdY, { align: 'center' })
+  doc.text('Kepala Sekolah / Pimpinan,', ttdKiriTengah, ttdY + 5, { align: 'center' })
   if (profil.ttdKepala && sematkanTtd) {
     try {
       const ttdBase64 = await muatGambarBase64(profil.ttdKepala)
-      if (ttdBase64) doc.addImage(ttdBase64, 'PNG', mL, ttdY + 8, 32, 28)
+      if (ttdBase64) doc.addImage(ttdBase64, 'PNG', ttdKiriTengah - 16, ttdY + 8, 32, 28)
     } catch { /* kalau gagal muat, biarkan kosong (tetap bisa tanda tangan basah manual) */ }
   }
   doc.setFont('times', 'bold')
   const namaKepalaLines = doc.splitTextToSize(profil.namaKepala || '(Nama Kepala Sekolah)', ttdColW)
-  doc.text(namaKepalaLines, mL, ttdY + 39)
+  doc.text(namaKepalaLines, ttdKiriTengah, ttdY + 39, { align: 'center' })
   doc.setFont('times', 'normal'); doc.setFontSize(8.5)
-  doc.text(`NUPTK: ${profil.nuptk || profil.nip || '-'}`, mL, ttdY + 39 + namaKepalaLines.length * 4)
+  doc.text(`NUPTK: ${profil.nuptk || profil.nip || '-'}`, ttdKiriTengah, ttdY + 39 + namaKepalaLines.length * 4, { align: 'center' })
 
-  const ttdX2 = pageW - mR - ttdColW
+  const ttdKananTengah = pageW - mR - ttdColW / 2
   doc.setFont('times', 'normal'); doc.setFontSize(9)
   const titiMangsaLines = doc.splitTextToSize(titiMangsa, ttdColW)
-  doc.text(titiMangsaLines, ttdX2, ttdY)
-  doc.text('Guru Mata Pelajaran,', ttdX2, ttdY + 4 + (titiMangsaLines.length - 1) * 4)
+  doc.text(titiMangsaLines, ttdKananTengah, ttdY, { align: 'center' })
+  doc.text('Guru Mata Pelajaran,', ttdKananTengah, ttdY + 4 + (titiMangsaLines.length - 1) * 4, { align: 'center' })
   doc.setFont('times', 'bold')
   const namaGuruLines = doc.splitTextToSize(namaGuru || '(Nama Guru)', ttdColW)
-  doc.text(namaGuruLines, ttdX2, ttdY + 39)
+  doc.text(namaGuruLines, ttdKananTengah, ttdY + 39, { align: 'center' })
   doc.setFont('times', 'normal'); doc.setFontSize(8.5)
-  doc.text(`NUPTK: ${nuptk || '-'}`, ttdX2, ttdY + 39 + namaGuruLines.length * 4)
+  doc.text(`NUPTK: ${nuptk || '-'}`, ttdKananTengah, ttdY + 39 + namaGuruLines.length * 4, { align: 'center' })
 
   if (mode === 'preview') {
     const namaFile = `${namaFileAman(`Prota ${namaMapel} ${namaKelas} ${tahunAjaran}`)}.pdf`
@@ -798,34 +794,33 @@ async function eksporPromesPDF(params: {
     return `${tahun}-${String(idx + 1).padStart(2, '0')}`
   }
 
-  let curY = 12
-  doc.setLineWidth(1); doc.setDrawColor(0, 0, 0)
-  doc.line(mL, curY, pageW - mR, curY); curY += 4
-  doc.setFontSize(14); doc.setFont('times', 'bold'); doc.setTextColor(15, 23, 42)
-  doc.text('PROGRAM SEMESTER', pageW / 2, curY, { align: 'center' }); curY += 5
-  doc.setFontSize(11)
-  const namaSekolahLines = doc.splitTextToSize(profil.namaSekolah || 'Nama Satuan Pendidikan', contentWidth - 20)
-  doc.text(namaSekolahLines, pageW / 2, curY, { align: 'center' }); curY += namaSekolahLines.length * 4 + 0.5
-  if (profil.alamat) {
-    doc.setFont('times', 'normal'); doc.setFontSize(9); doc.setTextColor(71, 85, 105)
-    const alamatLines = doc.splitTextToSize(profil.alamat, contentWidth - 20)
-    doc.text(alamatLines, pageW / 2, curY, { align: 'center' }); curY += alamatLines.length * 3.3 + 1
-  }
-  doc.setLineWidth(0.5); doc.setDrawColor(0, 0, 0)
-  doc.line(mL, curY, pageW - mR, curY); curY += 6.5
+  let curY = 14
 
-  doc.setFont('times', 'bold'); doc.setFontSize(9.5); doc.setTextColor(15, 23, 42)
-  const kolKananX = mL + contentWidth / 2
-  const labelWPromes = 30
-  const barisInfoPromes = (label: string, value: string, x: number, yy: number) => {
-    doc.text(label, x, yy)
-    doc.text(`: ${value}`, x + labelWPromes, yy)
+  // ── JUDUL & IDENTITAS ── format disamakan dengan halaman Analisis Alokasi
+  // Waktu: judul tebal rata tengah, lalu baris identitas "Label : Value",
+  // ditutup satu garis pemisah -- tanpa kop nama sekolah besar/alamat terpisah.
+  doc.setFontSize(13); doc.setFont('times', 'bold'); doc.setTextColor(15, 23, 42)
+  doc.text('PROGRAM SEMESTER', pageW / 2, curY, { align: 'center' }); curY += 8
+
+  doc.setFont('times', 'normal'); doc.setFontSize(10); doc.setTextColor(15, 23, 42)
+  const labelWPromes = 40
+  const barisIdentitasPromes = (label: string, value: string) => {
+    doc.text(label, mL, curY)
+    const lines = doc.splitTextToSize(`: ${value || ''}`, contentWidth - labelWPromes)
+    doc.text(lines, mL + labelWPromes, curY)
+    curY += lines.length * 4.6
   }
-  barisInfoPromes('Mata Pelajaran', namaMapel, mL, curY)
-  barisInfoPromes('Kelas', namaKelas, kolKananX, curY); curY += 5.5
-  barisInfoPromes('Tahun Ajaran', tahunAjaran, mL, curY)
-  barisInfoPromes('Semester', semLabel, kolKananX, curY); curY += 5.5
-  barisInfoPromes('Alokasi Waktu', `${alokasiJpPerMinggu} jam/minggu`, mL, curY); curY += 6
+  barisIdentitasPromes('Satuan Pendidikan', profil.namaSekolah || '')
+  barisIdentitasPromes('Mata Pelajaran', namaMapel)
+  barisIdentitasPromes('Kelas', namaKelas)
+  barisIdentitasPromes('Semester', semLabel)
+  barisIdentitasPromes('Tahun Ajaran', tahunAjaran)
+  barisIdentitasPromes('Guru Mata Pelajaran', namaGuru)
+  barisIdentitasPromes('Alokasi Waktu', `${alokasiJpPerMinggu} jam/minggu`)
+  curY += 1
+
+  doc.setLineWidth(0.5); doc.setDrawColor(0, 0, 0)
+  doc.line(mL, curY, pageW - mR, curY); curY += 5.5
 
   type Cell = string | { content: string; colSpan?: number; rowSpan?: number; styles?: Record<string, unknown> }
   const headRow1: Cell[] = [
@@ -886,7 +881,7 @@ async function eksporPromesPDF(params: {
   const selKosongHitam = { content: '', colSpan: nWeekCols, styles: { fillColor: [20, 20, 20] as unknown as string } }
   body.push([
     { content: `Jumlah Jam Total ${semLabel}`, colSpan: 3, styles: { halign: 'right' as unknown as string, fontStyle: 'bold' as unknown as string } },
-    { content: String(totalDialokasikan), styles: { halign: 'center' as unknown as string, fontStyle: 'bold' as unknown as string, textColor: [106, 25, 125] as unknown as string } },
+    { content: String(totalDialokasikan), styles: { halign: 'center' as unknown as string, fontStyle: 'bold' as unknown as string, textColor: [0, 0, 0] as unknown as string } },
     selKosongHitam,
   ])
   body.push([
@@ -919,8 +914,8 @@ async function eksporPromesPDF(params: {
     startY: curY,
     head: [headRow1, headRow2],
     body,
-    headStyles: { font: 'times', fillColor: [237, 227, 243], textColor: [30, 10, 40], fontStyle: 'bold', fontSize: 11, halign: 'center', valign: 'middle', cellPadding: 2.8, lineColor: [0, 0, 0], lineWidth: 0.1 },
-    bodyStyles: { font: 'times', fontSize: 11, valign: 'middle', overflow: 'linebreak', cellPadding: 2.6, lineColor: [0, 0, 0], lineWidth: 0.1 },
+    headStyles: { font: 'times', fillColor: [237, 227, 243], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 11, halign: 'center', valign: 'middle', cellPadding: 2.8, lineColor: [0, 0, 0], lineWidth: 0.1 },
+    bodyStyles: { font: 'times', fontSize: 11, valign: 'middle', overflow: 'linebreak', cellPadding: 2.6, lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0] },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     columnStyles: lebarKolom.reduce((acc: any, col, idx) => { acc[idx] = col; return acc }, {}),
     tableWidth: contentWidth,
@@ -943,33 +938,36 @@ async function eksporPromesPDF(params: {
   const titiMangsa = resolveTitiMangsa(profil)
   const ttdColW = 55
 
-  // Kepala Sekolah/Pimpinan ("Mengetahui") SELALU di KIRI, Guru Mapel di
-  // KANAN -- titimangsa sejajar kolom KANAN (Guru). Tanpa garis TTD.
+  // Blok KIRI (Kepala Sekolah/Pimpinan) tetap di sisi KIRI halaman, blok KANAN
+  // (Guru Mapel) tetap di sisi KANAN -- tapi teks di dalam masing-masing kolom
+  // rata TENGAH (center) terhadap lebar kolomnya sendiri, bukan rata kiri/kanan
+  // mentah, supaya blok tanda tangan terlihat rapi di tengah "ruang"-nya.
+  const ttdKiriTengah = mL + ttdColW / 2
   doc.setFont('times', 'normal'); doc.setFontSize(10); doc.setTextColor(15, 23, 42)
-  doc.text('Mengetahui,', mL, afterTableY)
-  doc.text('Kepala Sekolah / Pimpinan,', mL, afterTableY + 4)
+  doc.text('Mengetahui,', ttdKiriTengah, afterTableY, { align: 'center' })
+  doc.text('Kepala Sekolah / Pimpinan,', ttdKiriTengah, afterTableY + 4, { align: 'center' })
   if (profil.ttdKepala && sematkanTtd) {
     try {
       const ttdBase64 = await muatGambarBase64(profil.ttdKepala)
-      if (ttdBase64) doc.addImage(ttdBase64, 'PNG', mL, afterTableY + 7, 30, 26)
+      if (ttdBase64) doc.addImage(ttdBase64, 'PNG', ttdKiriTengah - 15, afterTableY + 7, 30, 26)
     } catch { /* kalau gagal muat, biarkan kosong */ }
   }
   doc.setFont('times', 'bold'); doc.setFontSize(10)
   const namaKepalaLines = doc.splitTextToSize(profil.namaKepala || '(Nama Kepala Sekolah)', ttdColW)
-  doc.text(namaKepalaLines, mL, afterTableY + 34)
+  doc.text(namaKepalaLines, ttdKiriTengah, afterTableY + 34, { align: 'center' })
   doc.setFont('times', 'normal'); doc.setFontSize(9.5)
-  doc.text(`NUPTK: ${profil.nuptk || profil.nip || '-'}`, mL, afterTableY + 34 + namaKepalaLines.length * 4)
+  doc.text(`NUPTK: ${profil.nuptk || profil.nip || '-'}`, ttdKiriTengah, afterTableY + 34 + namaKepalaLines.length * 4, { align: 'center' })
 
-  const ttdX2 = pageW - mR - ttdColW
+  const ttdKananTengah = pageW - mR - ttdColW / 2
   doc.setFontSize(10)
   const titiMangsaLines = doc.splitTextToSize(titiMangsa, ttdColW)
-  doc.text(titiMangsaLines, ttdX2, afterTableY)
-  doc.text('Guru Mata Pelajaran,', ttdX2, afterTableY + 4 + (titiMangsaLines.length - 1) * 4)
+  doc.text(titiMangsaLines, ttdKananTengah, afterTableY, { align: 'center' })
+  doc.text('Guru Mata Pelajaran,', ttdKananTengah, afterTableY + 4 + (titiMangsaLines.length - 1) * 4, { align: 'center' })
   doc.setFont('times', 'bold')
   const namaGuruLines = doc.splitTextToSize(namaGuru || '(Nama Guru)', ttdColW)
-  doc.text(namaGuruLines, ttdX2, afterTableY + 34)
+  doc.text(namaGuruLines, ttdKananTengah, afterTableY + 34, { align: 'center' })
   doc.setFont('times', 'normal'); doc.setFontSize(9.5)
-  doc.text(`NUPTK: ${nuptk || '-'}`, ttdX2, afterTableY + 34 + namaGuruLines.length * 4)
+  doc.text(`NUPTK: ${nuptk || '-'}`, ttdKananTengah, afterTableY + 34 + namaGuruLines.length * 4, { align: 'center' })
 
   if (mode === 'preview') {
     const namaFile = `${namaFileAman(`Promes ${semLabel} ${namaMapel} ${namaKelas} ${tahunAjaran}`)}.pdf`
@@ -1152,13 +1150,30 @@ export default function ProtaPromesPage() {
 
   // ── Derived data ──
 
-  const hariLiburSet = useMemo(() => buildHariLiburSet(eventsKaldik), [eventsKaldik])
-  const warnaKegiatanPerTanggal = useMemo(() => buildWarnaKegiatanPerTanggal(eventsKaldik, daftarKlasifikasiKaldik), [eventsKaldik, daftarKlasifikasiKaldik])
-
   const guruTerpilih = daftarGuru.find(g => g.id === filterGuruId)
   const mapelTerpilih = daftarMapel.find(m => m.id === filterMapelId)
   const rombelTerpilih = daftarRombel.find(r => r.id === filterRombelId)
   const tahunAjaran = semesterGanjil.tahunAjaran
+
+  // Tingkat (master_tingkat) & unit (lembagaId) tempat rombel terpilih berada --
+  // dicocokkan lewat NAMA tingkat (pola yang sama dipakai filter Kelas per-Unit
+  // di form di bawah), karena Rombel di modul ini tidak menyimpan tingkatId.
+  const tingkatRombelTerpilih = useMemo(
+    () => daftarTingkat.find((tt: any) => tt.nama === rombelTerpilih?.tingkat),
+    [daftarTingkat, rombelTerpilih]
+  )
+  const unitIdRombelTerpilih = tingkatRombelTerpilih?.lembagaId || ''
+
+  // Kaldik disaring khusus untuk kelas yang sedang dipilih (event yang hanya
+  // menyasar kelas/unit lain TIDAK ikut memotong hari efektif kelas ini) --
+  // supaya JP efektif di sini SAMA PERSIS dengan Analisis Alokasi Waktu.
+  const eventsKaldikScopedKelas = useMemo(() => {
+    if (!filterRombelId || !unitIdRombelTerpilih) return []
+    return eventsKaldik.filter(ev => agendaBerlakuUntukKelas(ev, unitIdRombelTerpilih, rombelTerpilih ? { id: rombelTerpilih.id, tingkatId: tingkatRombelTerpilih?.id || '' } : undefined))
+  }, [eventsKaldik, filterRombelId, unitIdRombelTerpilih, rombelTerpilih, tingkatRombelTerpilih])
+
+  const hariLiburSet = useMemo(() => buildHariLiburSet(eventsKaldikScopedKelas), [eventsKaldikScopedKelas])
+  const warnaKegiatanPerTanggal = useMemo(() => buildWarnaKegiatanPerTanggal(eventsKaldikScopedKelas, daftarKlasifikasiKaldik), [eventsKaldikScopedKelas, daftarKlasifikasiKaldik])
 
   // ── Baris Prota: gabungan CP + Materi + TP + ATP untuk mapel & tingkat kelas terpilih ──
   // INI PERBAIKAN UTAMA #1: sebelumnya membaca key 'data_analisis_atp' yang tidak pernah
@@ -1224,25 +1239,27 @@ export default function ProtaPromesPage() {
     return hitungTotalJp(matriksJp[key] || '')
   }, [jpPerHari, filterGuruId, filterMapelId, filterRombelId, matriksJp])
 
-  // Minggu efektif institusional per bulan (dasar kapasitas — sama seperti halaman Minggu Efektif)
-  const mingguEfektifSem1 = useMemo(() =>
-    hitungMingguEfektifPerBulan(semesterGanjil.tanggalMulai, semesterGanjil.tanggalSelesai, hariLiburSet),
-    [semesterGanjil, hariLiburSet]
+  // KAPASITAS JP (batas atas pengisian Prota) — dihitung PRESISI per hari jadwal
+  // (jpPerHari x hariLiburSet lewat hitungMingguKapasitas, sama seperti sumber
+  // "capacityJp" pada kalender mingguan Promes) supaya SAMA PERSIS dengan
+  // "Jumlah Jam Efektif" di halaman Analisis Alokasi Waktu -- BUKAN sekadar
+  // jumlah minggu efektif Lembaga dikali rata JP/minggu (bisa berbeda kalau
+  // sebagian hari dalam satu minggu kena libur, sebagian tidak).
+  const kapasitasMingguanSem1 = useMemo(() =>
+    hitungMingguKapasitas(semesterGanjil.tanggalMulai, semesterGanjil.tanggalSelesai, hariLiburSet, jpPerHari),
+    [semesterGanjil, hariLiburSet, jpPerHari]
   )
-  const mingguEfektifSem2 = useMemo(() =>
-    hitungMingguEfektifPerBulan(semesterGenap.tanggalMulai, semesterGenap.tanggalSelesai, hariLiburSet),
-    [semesterGenap, hariLiburSet]
+  const kapasitasMingguanSem2 = useMemo(() =>
+    hitungMingguKapasitas(semesterGenap.tanggalMulai, semesterGenap.tanggalSelesai, hariLiburSet, jpPerHari),
+    [semesterGenap, hariLiburSet, jpPerHari]
   )
-
-  // KAPASITAS JP (batas atas pengisian Prota) — jumlah minggu efektif × JP/minggu.
-  // "jangan sampai di minggu efektif hanya ada 70 JP, tapi di prota diisi 72 JP"
   const capJpSem1 = useMemo(() =>
-    Object.values(mingguEfektifSem1).reduce((a: number, b: number) => a + b, 0) * alokasiJpPerMinggu,
-    [mingguEfektifSem1, alokasiJpPerMinggu]
+    Object.values(kapasitasMingguanSem1).flat().reduce((a, w) => a + w.capacityJp, 0),
+    [kapasitasMingguanSem1]
   )
   const capJpSem2 = useMemo(() =>
-    Object.values(mingguEfektifSem2).reduce((a: number, b: number) => a + b, 0) * alokasiJpPerMinggu,
-    [mingguEfektifSem2, alokasiJpPerMinggu]
+    Object.values(kapasitasMingguanSem2).flat().reduce((a, w) => a + w.capacityJp, 0),
+    [kapasitasMingguanSem2]
   )
 
   const totalJpTerisiSem1 = useMemo(() => protaRowsFull.filter(r => r.semester === 'ganjil').reduce((a, r) => a + (r.jp || 0), 0), [protaRowsFull])

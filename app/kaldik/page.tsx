@@ -499,33 +499,38 @@ async function buatDokumenPDF(params: ParamsPDF) {
   }
 
   async function drawSignature(yTop:number) {
-    const kolKiriX=ML+20; const kolKananX=PW-MR-75
+    // Blok KIRI (Mudir/Kepala Sekolah) tetap di sisi KIRI, blok KANAN (Waka
+    // Kurikulum) tetap di sisi KANAN -- tapi teks di dalam masing-masing kolom
+    // rata TENGAH terhadap lebar kolomnya sendiri, bukan rata kiri mentah.
+    const lebarKol=75
+    const kolKiriX=ML+20; const kolKananX=PW-MR-lebarKol
+    const kolKiriTengah=kolKiriX+lebarKol/2; const kolKananTengah=kolKananX+lebarKol/2
     let sy=yTop+7
     doc.setFont('times','normal');doc.setFontSize(9);doc.setTextColor(...DARK)
     // Baris 1: titimangsa (cuma di kolom KANAN, sejajar dengan label Wakakur)
-    doc.text(titiMangsa||titiMangsaHariIni('Bandung'),kolKananX,sy)
-    doc.text('Mengetahui,',kolKiriX,sy)
+    doc.text(titiMangsa||titiMangsaHariIni('Bandung'),kolKananTengah,sy,{align:'center'})
+    doc.text('Mengetahui,',kolKiriTengah,sy,{align:'center'})
     sy+=5.5
     // Baris 2: label jabatan -- SEJAJAR persis di kedua kolom
-    doc.text(scope==='keseluruhan'?`Mudir ${namaInstitusi}`:`${jabatanPenandatangan}`,kolKiriX,sy)
-    doc.text(wakaLabel,kolKananX,sy)
+    doc.text(scope==='keseluruhan'?`Mudir ${namaInstitusi}`:`${jabatanPenandatangan}`,kolKiriTengah,sy,{align:'center'})
+    doc.text(wakaLabel,kolKananTengah,sy,{align:'center'})
     const syLabel=sy
     // Baris 3: gambar tanda tangan (kalau ada & toggle aktif) -- SEJAJAR
     if(ttdPenandatangan && sematkanTtd){
-      try{ const b=await muatGambarBase64(ttdPenandatangan); if(b) doc.addImage(b,'PNG',kolKiriX,syLabel+2,30,24) }catch{}
+      try{ const b=await muatGambarBase64(ttdPenandatangan); if(b) doc.addImage(b,'PNG',kolKiriTengah-15,syLabel+2,30,24) }catch{}
     }
     if(ttdWaka && sematkanTtd){
-      try{ const b=await muatGambarBase64(ttdWaka); if(b) doc.addImage(b,'PNG',kolKananX,syLabel+2,30,24) }catch{}
+      try{ const b=await muatGambarBase64(ttdWaka); if(b) doc.addImage(b,'PNG',kolKananTengah-15,syLabel+2,30,24) }catch{}
     }
     sy=syLabel+21
     // Baris 4: nama -- SEJAJAR
     doc.setFont('times','bold');doc.setFontSize(9.5)
-    doc.text(namaPenandatangan||`(${jabatanPenandatangan})`,kolKiriX,sy)
-    doc.text(namaWaka||'(Waka Kurikulum belum ditugaskan)',kolKananX,sy)
+    doc.text(namaPenandatangan||`(${jabatanPenandatangan})`,kolKiriTengah,sy,{align:'center'})
+    doc.text(namaWaka||'(Waka Kurikulum belum ditugaskan)',kolKananTengah,sy,{align:'center'})
     // Baris 5: NUPTK -- SEJAJAR (Mudir secara konvensi tidak perlu NUPTK di kiri, Wakakur selalu tampil)
     sy+=5;doc.setFont('times','normal');doc.setFontSize(8.5)
-    if(scope!=='keseluruhan') doc.text(`NUPTK. ${nipPenandatangan||'-'}`,kolKiriX,sy)
-    doc.text(`NUPTK. ${nipWaka||'-'}`,kolKananX,sy)
+    if(scope!=='keseluruhan') doc.text(`NUPTK. ${nipPenandatangan||'-'}`,kolKiriTengah,sy,{align:'center'})
+    doc.text(`NUPTK. ${nipWaka||'-'}`,kolKananTengah,sy,{align:'center'})
   }
 
   // ── Susun daftar bulan yang akan dicetak ────────────────────────────────

@@ -304,15 +304,35 @@ function hitungMingguEfektif(
 // ============================================================
 // hasilRombel HARUS sudah dihitung dengan cakupan (scope) kelas yang bersangkutan,
 // begitu juga liburSet — supaya kegiatan yang hanya menyasar kelas lain tidak ikut
-// memotong hari efektif kelas ini (lihat aturan #3).
+// memotong hari efektif kelas ini.
+//
+// ATURAN MAPEL (berbeda dari aturan Lembaga di hitungMingguEfektif):
+// - Lembaga: minggu tidak efektif kalau >=3 hari (dari Senin-Jumat) kena
+//   libur/kegiatan, TANPA melihat jadwal guru/mapel mana pun.
+// - Mapel: minggu tetap dihitung EFEKTIF untuk guru+mapel tsb selama ADA
+//   hari mengajarnya yang tidak kena libur -- meski minggu itu berstatus
+//   "tidak efektif" untuk Lembaga (mis. libur Senin-Rabu tapi guru ini
+//   mengajar Kamis-Jumat).
+// - JP efektif dihitung PER HARI JADWAL (bukan langsung total JP/minggu):
+//   tiap entri Jadwal Pelajaran = 1 JP pada hari itu. Hari yang kena libur
+//   TIDAK menyumbang JP; hari yang tidak kena libur tetap menyumbang JP
+//   sesuai jadwalnya. Jadi kalau guru mengajar Senin 2 JP & Rabu 3 JP, dan
+//   Senin kena kegiatan tapi Rabu tidak, minggu itu hanya terhitung 3 JP
+//   efektif -- bukan 5 JP penuh.
 function hitungHariEfektifGuru(
   hasilRombel: HasilPerhitungan,
-  jadwalTerjadwal: { hari: string }[],  // entri jadwal (hari) utk kombinasi guru+mapel+rombel ini
-  jpPerMinggu: number,
+  jadwalTerjadwal: { hari: string }[],  // entri jadwal (hari) utk kombinasi guru+mapel+rombel ini -- 1 entri = 1 JP
   liburSet: Set<string>
 ): HasilHariEfektif {
   const HARI_MAP: { [k: string]: number } = { Senin: 1, Selasa: 2, Rabu: 3, Kamis: 4, Jumat: 5, Sabtu: 6 }
-  const hariMengajar = [...new Set(jadwalTerjadwal.map(j => j.hari))].filter(h => HARI_MAP[h])
+
+  // JP per hari = banyaknya entri jadwal (jam pelajaran) guru ini mengajar mapel
+  // ini di kelas ini pada hari tsb -- presisi per hari, bukan dibagi rata dari
+  // total JP/minggu, supaya distribusi JP tiap hari (mis. Senin 2 JP, Rabu 3 JP)
+  // tetap akurat saat sebagian hari kena libur.
+  const jpPerHari: { [hari: string]: number } = {}
+  jadwalTerjadwal.forEach(j => { jpPerHari[j.hari] = (jpPerHari[j.hari] || 0) + 1 })
+  const hariMengajar = Object.keys(jpPerHari).filter(h => HARI_MAP[h])
 
   let totalHariMengajar = 0
   let totalJpEfektif = 0
@@ -321,6 +341,7 @@ function hitungHariEfektifGuru(
 
   hasilRombel.detail.forEach(minggu => {
     const hariEfektifDiMingguIni: string[] = []
+    let jpMingguIni = 0
 
     hariMengajar.forEach(hari => {
       const offset = (HARI_MAP[hari] || 1) - 1
@@ -331,15 +352,19 @@ function hitungHariEfektifGuru(
 
       if (tgl >= mulaiMinggu && tgl <= endMinggu && !liburSet.has(tglHari)) {
         hariEfektifDiMingguIni.push(hari)
+        jpMingguIni += jpPerHari[hari]
       }
     })
 
-    const jpMingguIni = hariEfektifDiMingguIni.length > 0 ? jpPerMinggu : 0
     totalHariMengajar += hariEfektifDiMingguIni.length
     totalJpEfektif += jpMingguIni
 
     if (hariEfektifDiMingguIni.length > 0 || hariMengajar.length > 0) {
       perMinggu.push({
+        // `efektif` di sini SENGAJA tetap status LEMBAGA (minggu.efektif) --
+        // dipakai utk mendeteksi "minggu tidak efektif Lembaga tapi tetap ada
+        // KBM mapel ini" pada catatan info di layar. Status efektif KHUSUS
+        // mapel ada di `jpEfektif > 0`.
         mingguLabel: minggu.minggu,
         hariMengajar: hariEfektifDiMingguIni,
         efektif: minggu.efektif,
@@ -372,6 +397,8 @@ function KartuPerhitunganMingguJam({
   hasil,
   jpPerMinggu,
   jpKnown,
+  totalJpOverride,
+  hariEfektifInfo,
   showDownload,
   onDownloadGanjil,
   onDownloadGenap,
@@ -386,6 +413,16 @@ function KartuPerhitunganMingguJam({
   hasil: HasilPerhitungan
   jpPerMinggu?: number
   jpKnown?: boolean
+  // JP total yang SUDAH dihitung presisi per hari jadwal (aturan Mapel) --
+  // kalau diisi, dipakai menggantikan hasil.mingguEfektif * jpPerMinggu,
+  // karena JP mapel bisa berbeda dari sekadar minggu-efektif dikali rata JP
+  // per minggu (lihat aturan #5: sebagian hari dalam satu minggu bisa kena
+  // libur sementara hari lain tidak).
+  totalJpOverride?: number
+  // Total hari mengajar efektif (aturan Mapel) -- kalau diisi, ditampilkan
+  // sebagai baris "Jumlah Hari Efektif" di antara III (Minggu Efektif) dan
+  // Jumlah Jam Efektif.
+  hariEfektifInfo?: { totalHari: number; perHari: { hari: string; jumlah: number }[] }
   showDownload?: boolean
   onDownloadGanjil?: () => void
   onDownloadGenap?: () => void
@@ -395,7 +432,9 @@ function KartuPerhitunganMingguJam({
   onToggleExpand: () => void
   footnote?: string
 }) {
-  const totalJp = jpKnown && jpPerMinggu !== undefined ? hasil.mingguEfektif * jpPerMinggu : null
+  const totalJp = totalJpOverride !== undefined
+    ? totalJpOverride
+    : (jpKnown && jpPerMinggu !== undefined ? hasil.mingguEfektif * jpPerMinggu : null)
 
   const bulanMap: { [k: string]: { label: string; jml: number } } = {}
   hasil.detail.forEach(d => {
@@ -512,11 +551,25 @@ function KartuPerhitunganMingguJam({
       <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-2 text-xs font-semibold text-slate-700 mt-2">
         <p><strong>III. Jumlah Minggu Efektif</strong> = Jumlah Minggu − Jumlah Minggu Tidak Efektif</p>
         <p className="text-[#4A1159] font-black pl-4">= {hasil.totalMinggu} − {hasil.mingguTidakEfektif} = <span className="text-lg">{hasil.mingguEfektif} Minggu</span></p>
-        <p className="pt-1"><strong>IV. Jumlah Jam Efektif</strong> = Jumlah Minggu Efektif × Jumlah JP/Minggu</p>
-        {totalJp !== null ? (
-          <p className="text-[#4A1159] font-black pl-4">= {hasil.mingguEfektif} × {jpPerMinggu} JP/Minggu = <span className="text-lg">{totalJp} Jam Pelajaran</span></p>
-        ) : (
-          <p className="text-slate-500 pl-4 text-[10px]">{footnote || '* Pilih Guru/Mapel/Kelas di tab "Per Mapel/Guru" untuk hasil JP spesifik.'}</p>
+        {/* Jumlah Hari Efektif & Jumlah Jam Efektif (IV & V) HANYA relevan untuk
+            tampilan per-Mapel (hariEfektifInfo terisi) -- konsepnya berbasis jadwal
+            mengajar satu guru/mapel per hari, tidak berlaku di level Lembaga. Untuk
+            Lembaga, kartu ini cukup berhenti di III. Jumlah Minggu Efektif. */}
+        {hariEfektifInfo && (
+          <>
+            <p className="pt-1"><strong>IV. Jumlah Hari Efektif</strong> = Jumlah hari mengajar yang tidak kena libur (dijumlahkan per minggu)</p>
+            <p className="text-[#4A1159] font-black pl-4">
+              = <span className="text-lg">{hariEfektifInfo.totalHari} Hari</span>{' '}
+              <span className="text-[10px] font-semibold text-slate-500">
+                ({hariEfektifInfo.perHari.map(h => `${h.hari}(${h.jumlah}x)`).join(', ') || '-'})
+              </span>
+            </p>
+            <p className="pt-1"><strong>V. Jumlah Jam Efektif</strong> = Jumlah JP pada tiap hari mengajar yang tidak kena libur (dijumlahkan per minggu)</p>
+            <p className="text-[#4A1159] font-black pl-4">= <span className="text-lg">{totalJp} Jam Pelajaran</span> <span className="text-[10px] font-semibold text-slate-500">(dihitung dari Jadwal Pelajaran per hari, bukan sekadar {hasil.mingguEfektif} minggu × {jpPerMinggu ?? 0} JP/minggu)</span></p>
+          </>
+        )}
+        {!hariEfektifInfo && footnote && (
+          <p className="text-slate-500 pl-4 text-[10px]">{footnote}</p>
         )}
       </div>
 
@@ -896,8 +949,32 @@ export default function MingguEfektifPage() {
   // Hitung hari & JP efektif utk guru/mapel/rombel terpilih
   const hasilHariEfektif = useMemo(() => {
     if (!hasilRombelMapel || !filterGuruId || !filterMapelId || !filterRombelId) return null
-    return hitungHariEfektifGuru(hasilRombelMapel, jadwalTerjadwal, jpPerMingguAktif, liburSetMapel)
-  }, [hasilRombelMapel, jadwalTerjadwal, jpPerMingguAktif, liburSetMapel, filterGuruId, filterMapelId, filterRombelId])
+    return hitungHariEfektifGuru(hasilRombelMapel, jadwalTerjadwal, liburSetMapel)
+  }, [hasilRombelMapel, jadwalTerjadwal, liburSetMapel, filterGuruId, filterMapelId, filterRombelId])
+
+  // Versi hasilRombelMapel yang statusnya (minggu efektif/tidak per minggu)
+  // SUDAH DIKOREKSI ke aturan MAPEL (rule #3): sebuah minggu efektif untuk
+  // mapel ini selama ada hari mengajarnya yang tidak kena libur -- meskipun
+  // Lembaga menganggap minggu itu tidak efektif. Dipakai supaya kartu
+  // ringkasan DAN kotak formula III/IV di bawahnya selalu menunjukkan
+  // kesimpulan yang SAMA (sebelumnya keduanya memakai sumber angka yang
+  // berbeda sehingga bisa tidak sinkron).
+  const hasilMapelTerkoreksi: HasilPerhitungan | null = useMemo(() => {
+    if (!hasilRombelMapel || !hasilHariEfektif) return null
+    const statusMapelPerMinggu = new Map(hasilHariEfektif.perMinggu.map(m => [m.mingguLabel, m.jpEfektif > 0]))
+    const detail = hasilRombelMapel.detail.map(d => ({
+      ...d,
+      efektif: statusMapelPerMinggu.get(d.minggu) ?? d.efektif,
+    }))
+    const mingguTidakEfektif = detail.filter(d => !d.efektif).length
+    return {
+      totalMinggu: hasilRombelMapel.totalMinggu,
+      mingguEfektif: hasilRombelMapel.totalMinggu - mingguTidakEfektif,
+      mingguTidakEfektif,
+      detail,
+      detailTidakEfektif: hasilRombelMapel.detailTidakEfektif,
+    }
+  }, [hasilRombelMapel, hasilHariEfektif])
 
   // ============================================================
   // GENERATE PDF (client-side via API call)
@@ -911,7 +988,37 @@ export default function MingguEfektifPage() {
     const baseLiburSet = isMapelMode ? liburSetMapel : liburSet
     const baseKegiatanPerTgl = isMapelMode ? kegiatanPerTglMapel : kegiatanPerTgl
 
-    const semHasil = hitungMingguEfektif(semester.tanggalMulai, semester.tanggalSelesai, baseLiburSet, baseKegiatanPerTgl)
+    let semHasil = hitungMingguEfektif(semester.tanggalMulai, semester.tanggalSelesai, baseLiburSet, baseKegiatanPerTgl)
+
+    let namaGuru = ''
+    let namaMapelPdf = ''
+    let namaRombelPdf = ''
+    let jpPerMingguPdf = 0
+    let hasilHariPdf: HasilHariEfektif | null = null
+    let cakupanLabel = ''
+    let nuptkGuru = ''
+
+    // Untuk unduhan per Mapel: status efektif TIAP MINGGU di semHasil dikoreksi
+    // ke aturan Mapel (minggu tetap efektif kalau ADA hari mengajar guru ini yang
+    // tidak kena libur, walau Lembaga menganggap minggu itu tidak efektif) --
+    // PERSIS logika hasilMapelTerkoreksi di layar, supaya PDF & tampilan layar
+    // selalu menunjukkan kesimpulan yang sama.
+    if (isMapelMode) {
+      hasilHariPdf = hitungHariEfektifGuru(semHasil, jadwalTerjadwal, baseLiburSet)
+      const statusMapelPerMinggu = new Map(hasilHariPdf.perMinggu.map(m => [m.mingguLabel, m.jpEfektif > 0]))
+      const detailTerkoreksi = semHasil.detail.map(d => ({
+        ...d,
+        efektif: statusMapelPerMinggu.get(d.minggu) ?? d.efektif,
+      }))
+      const mingguTidakEfektifTerkoreksi = detailTerkoreksi.filter(d => !d.efektif).length
+      semHasil = {
+        totalMinggu: semHasil.totalMinggu,
+        mingguEfektif: semHasil.totalMinggu - mingguTidakEfektifTerkoreksi,
+        mingguTidakEfektif: mingguTidakEfektifTerkoreksi,
+        detail: detailTerkoreksi,
+        detailTidakEfektif: semHasil.detailTidakEfektif,
+      }
+    }
 
     // Bangun distribusi per bulan langsung dari bulanKey/bulanLabel yang sudah benar
     // (sudah memperhitungkan aturan pemotongan minggu lintas-bulan via hari Rabu)
@@ -924,14 +1031,6 @@ export default function MingguEfektifPage() {
     const bulanDistribusi = Object.entries(bulanAgg)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([, v]) => ({ bulan: v.label, jmlMinggu: v.jml, kegiatanTE: [...v.kegiatanTE].join(', ') }))
-
-    let namaGuru = ''
-    let namaMapelPdf = ''
-    let namaRombelPdf = ''
-    let jpPerMingguPdf = 0
-    let hasilHariPdf: HasilHariEfektif | null = null
-    let cakupanLabel = ''
-    let nuptkGuru = ''
 
     // --- Identitas penandatangan (Kepala Sekolah / Mudir) diambil OTOMATIS,
     //     mengikuti unit yang relevan -- konsisten dengan Kaldik/Jadwal/Prota-Promes.
@@ -980,7 +1079,6 @@ export default function MingguEfektifPage() {
       namaMapelPdf = daftarMapel.find((m: any) => m.id === filterMapelId)?.nama || ''
       namaRombelPdf = daftarRombel.find((r: any) => r.id === filterRombelId)?.nama || ''
       jpPerMingguPdf = jpPerMingguAktif
-      hasilHariPdf = hitungHariEfektifGuru(semHasil, jadwalTerjadwal, jpPerMingguAktif, liburSetMapel)
       cakupanLabel = `Kelas: ${namaRombelPdf} — Mapel: ${namaMapelPdf}`
     } else {
       if (scopeLevel === 'kelas' && scopeRombelObj) namaRombelPdf = scopeRombelObj.nama || ''
@@ -1315,20 +1413,18 @@ export default function MingguEfektifPage() {
 
                 {filterRombelId && hasilRombelMapel && (
                   <>
-                  {/* KARTU RINGKASAN KHUSUS GURU+MAPEL+KELAS INI — dihitung dari
-                      hasil silang Kaldik (hari libur per kelas ini) DENGAN Jadwal
-                      Pelajaran (hari & JP aktual guru ini mengajar mapel ini di
-                      kelas ini). Angkanya BISA berbeda dari kartu Lembaga Pusat/
-                      Unit, karena di sini yang dihitung "efektif" adalah minggu
-                      yang masih punya hari mengajar guru ini yang tidak kena
-                      libur/kegiatan — bukan sekadar 3-hari-libur seperti di
-                      level Lembaga. */}
-                  {filterGuruId && filterMapelId && hasilHariEfektif && (
+                  {/* KARTU RINGKASAN KHUSUS GURU+MAPEL+KELAS INI. Angkanya SENGAJA
+                      disamakan persis dengan Tabel III/IV di kartu "Perhitungan
+                      Minggu/Jam Efektif" tepat di bawah ini -- keduanya memakai
+                      hasilMapelTerkoreksi (aturan MAPEL: minggu efektif kalau ADA
+                      hari mengajar yang tidak kena libur, JP dihitung presisi per
+                      hari jadwal) supaya kesimpulannya selalu konsisten. */}
+                  {filterGuruId && filterMapelId && hasilMapelTerkoreksi && hasilHariEfektif && (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       {[
-                        { label: 'Total Minggu', val: hasilRombelMapel.totalMinggu, color: 'bg-slate-100 text-slate-800', icon: <Calendar className="w-5 h-5" /> },
-                        { label: 'Minggu Efektif (Mapel Ini)', val: hasilHariEfektif.perMinggu.filter(m => m.hariMengajar.length > 0).length, color: 'bg-[#FFDE59]/15 text-[#6A197D] border border-[#FFDE59]/60', icon: <CheckCircle2 className="w-5 h-5 text-[#6A197D]" /> },
-                        { label: 'Minggu Tidak Efektif (Mapel Ini)', val: hasilRombelMapel.totalMinggu - hasilHariEfektif.perMinggu.filter(m => m.hariMengajar.length > 0).length, color: 'bg-red-50 text-red-800 border border-red-100', icon: <AlertTriangle className="w-5 h-5 text-red-500" /> },
+                        { label: 'Total Minggu', val: hasilMapelTerkoreksi.totalMinggu, color: 'bg-slate-100 text-slate-800', icon: <Calendar className="w-5 h-5" /> },
+                        { label: 'Minggu Efektif (Mapel Ini)', val: hasilMapelTerkoreksi.mingguEfektif, color: 'bg-[#FFDE59]/15 text-[#6A197D] border border-[#FFDE59]/60', icon: <CheckCircle2 className="w-5 h-5 text-[#6A197D]" /> },
+                        { label: 'Minggu Tidak Efektif (Mapel Ini)', val: hasilMapelTerkoreksi.mingguTidakEfektif, color: 'bg-red-50 text-red-800 border border-red-100', icon: <AlertTriangle className="w-5 h-5 text-red-500" /> },
                         { label: 'Total JP Efektif (Mapel Ini)', val: `${hasilHariEfektif.totalJpEfektif} JP`, color: 'bg-[#6A197D]/5 text-[#4A1159] border border-[#6A197D]/15', icon: <Calculator className="w-5 h-5 text-[#6A197D]" /> },
                       ].map((item, i) => (
                         <div key={i} className={`rounded-2xl p-5 space-y-2 ${item.color}`}>
@@ -1343,9 +1439,11 @@ export default function MingguEfektifPage() {
                   <KartuPerhitunganMingguJam
                     title={`Perhitungan Minggu / Jam Efektif — Kelas ${daftarRombel.find(r => r.id === filterRombelId)?.nama || ''}${filterMapelId ? ` (${daftarMapel.find(m => m.id === filterMapelId)?.nama || ''})` : ''}`}
                     subtitle="Disaring dari Kaldik khusus untuk kelas ini — bisa berbeda dari tabel Lembaga di atas"
-                    hasil={hasilRombelMapel}
+                    hasil={(filterGuruId && filterMapelId && hasilMapelTerkoreksi) ? hasilMapelTerkoreksi : hasilRombelMapel}
                     jpPerMinggu={jpPerMingguAktif}
                     jpKnown={Boolean(filterGuruId && filterMapelId && filterRombelId && jpPerMingguAktif > 0)}
+                    totalJpOverride={filterGuruId && filterMapelId && hasilHariEfektif ? hasilHariEfektif.totalJpEfektif : undefined}
+                    hariEfektifInfo={filterGuruId && filterMapelId && hasilHariEfektif ? { totalHari: hasilHariEfektif.totalHariMengajar, perHari: hasilHariEfektif.perHari } : undefined}
                     showDownload={Boolean(filterGuruId && filterMapelId)}
                     onDownloadGanjil={() => handleDownloadPdf(semesterGanjil, 'mapel')}
                     onDownloadGenap={() => handleDownloadPdf(semesterGenap, 'mapel')}
@@ -1353,7 +1451,7 @@ export default function MingguEfektifPage() {
                     onPreviewGenap={() => handleDownloadPdf(semesterGenap, 'mapel', 'preview')}
                     expandDetail={expandDetailMapel}
                     onToggleExpand={() => setExpandDetailMapel(!expandDetailMapel)}
-                    footnote={filterGuruId && filterMapelId ? undefined : '* Pilih Guru dan Mata Pelajaran juga untuk menghitung IV. Jumlah Jam Efektif.'}
+                    footnote={filterGuruId && filterMapelId ? undefined : '* Pilih Guru dan Mata Pelajaran juga untuk menghitung Jumlah Hari & Jam Efektif.'}
                   />
                   </>
                 )}
@@ -1381,22 +1479,17 @@ export default function MingguEfektifPage() {
                   </div>
                 )}
 
-                {/* Ringkasan tambahan JP efektif (hasil silang dengan Jadwal Pelajaran) --
-                    HANYA ringkasan singkat, bukan tabel minggu efektif kedua yang terpisah,
-                    supaya tidak dobel dengan kartu "Perhitungan Minggu / Jam Efektif" di atas. */}
-                {hasilHariEfektif && (
+                {/* Catatan tambahan -- HANYA info nuansa, angka Hari Efektif-nya sendiri
+                    sudah dipindah jadi baris IV di kartu "Perhitungan Minggu / Jam Efektif"
+                    di atas (antara III. Minggu Efektif dan V. Jam Efektif), supaya tidak
+                    dobel dan urutannya Minggu -> Hari -> Jam Efektif. */}
+                {hasilHariEfektif && hasilHariEfektif.perMinggu.some(m => !m.efektif && m.hariMengajar.length > 0) && (
                   <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-1.5 text-xs">
-                    <p className="text-slate-600">
-                      Total Hari Mengajar Efektif: <strong className="text-[#58146A]">{hasilHariEfektif.totalHariMengajar} hari</strong>
-                      {' '}({hasilHariEfektif.perHari.map(h => `${h.hari}(${h.jumlah}x)`).join(', ') || '-'})
+                    <p className="text-[10px] font-semibold text-[#6A197D] bg-[#FFDE59]/15 border border-[#FFDE59]/60 rounded-lg px-2.5 py-1.5">
+                      ℹ️ Ada minggu yang berstatus "tidak efektif" untuk kelas ini (≥3 hari kena kegiatan/libur) namun tetap ada KBM
+                      mapel ini pada hari yang tidak bertepatan dengan hari libur tersebut. Kartu ringkasan &amp; Tabel III/IV/V di atas
+                      tetap mengikuti status resmi minggu tsb (tidak efektif), sesuai aturan Lembaga/Kelas.
                     </p>
-                    {hasilHariEfektif.perMinggu.some(m => !m.efektif && m.hariMengajar.length > 0) && (
-                      <p className="text-[10px] font-semibold text-[#6A197D] bg-[#FFDE59]/15 border border-[#FFDE59]/60 rounded-lg px-2.5 py-1.5 mt-1">
-                        ⚠️ Ada minggu yang berstatus "tidak efektif" untuk kelas ini (≥3 hari kena kegiatan/libur) namun tetap ada KBM
-                        mapel ini pada hari yang tidak bertepatan dengan hari libur tersebut — JP tetap terhitung efektif, makanya
-                        "Minggu Efektif (Mapel Ini)" di kartu atas bisa lebih tinggi dari perhitungan Kelas/Lembaga.
-                      </p>
-                    )}
                   </div>
                 )}
               </div>

@@ -368,21 +368,26 @@ export default function JadwalPelajaranPage() {
 
     sectionBg('N. Asesmen Pembelajaran'); sectionBody(rppmN)
 
-    // Tanda tangan
+    // Tanda tangan -- blok KIRI (Kepala Sekolah) tetap di sisi KIRI, blok KANAN
+    // (Guru Mapel) tetap di sisi KANAN, tapi teks di dalam masing-masing kolom
+    // rata TENGAH terhadap lebar kolomnya sendiri, bukan rata kiri/kanan mentah.
     pageCheck(45)
+    const ttdColWRpp = 55
+    const ttdKiriTengahRpp = L + ttdColWRpp / 2
+    const ttdKananTengahRpp = pageW - R - ttdColWRpp / 2
     doc.setFont('times', 'normal'); doc.setFontSize(9)
-    doc.text(d.titiMangsaFinal, pageW - R, y, { align: 'right' })
+    doc.text(d.titiMangsaFinal, ttdKananTengahRpp, y, { align: 'center' })
     y += 10
     const ttdY = y
-    doc.text('Mengetahui, Kepala Sekolah', L, ttdY)
-    doc.text(`Guru Mata Pelajaran`, pageW - R - 55, ttdY, { align: 'left' })
+    doc.text('Mengetahui, Kepala Sekolah', ttdKiriTengahRpp, ttdY, { align: 'center' })
+    doc.text(`Guru Mata Pelajaran`, ttdKananTengahRpp, ttdY, { align: 'center' })
     const namaY = ttdY + 22
     doc.setFont('times', 'bold')
-    doc.text('__________________________', L, namaY)
-    doc.text('__________________________', pageW - R - 55, namaY, { align: 'left' })
+    doc.text('__________________________', ttdKiriTengahRpp, namaY, { align: 'center' })
+    doc.text('__________________________', ttdKananTengahRpp, namaY, { align: 'center' })
     doc.setFont('times', 'normal'); doc.setFontSize(8.5)
-    doc.text('NBM. ……', L, namaY + 5)
-    doc.text('NBM. ……', pageW - R - 55, namaY + 5, { align: 'left' })
+    doc.text('NBM. ……', ttdKiriTengahRpp, namaY + 5, { align: 'center' })
+    doc.text('NBM. ……', ttdKananTengahRpp, namaY + 5, { align: 'center' })
 
     // Lampiran
     doc.addPage(); y = 18
@@ -489,7 +494,9 @@ export default function JadwalPelajaranPage() {
 
     anak.push(sectionHeader('N. Asesmen Pembelajaran'), bodyPara(rppmN))
 
-    anak.push(new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: d.titiMangsaFinal, size: 20 })], spacing: { before: 300, after: 300 } }))
+    // Kolom KIRI (Kepala Sekolah) tetap di sisi KIRI, kolom KANAN (Guru Mapel,
+    // termasuk titimangsa) tetap di sisi KANAN -- tapi tiap paragraf di dalam
+    // sel rata TENGAH (AlignmentType.CENTER), bukan rata kiri/kanan mentah.
     anak.push(new Table({
       width: { size: 9600, type: WidthType.DXA },
       columnWidths: [4800, 4800],
@@ -497,8 +504,8 @@ export default function JadwalPelajaranPage() {
       rows: [
         new TableRow({
           children: [
-            new TableCell({ width: { size: 4800, type: WidthType.DXA }, borders: { top: { style: 'none' }, bottom: { style: 'none' }, left: { style: 'none' }, right: { style: 'none' } }, children: [new Paragraph({ children: [new TextRun({ text: 'Mengetahui, Kepala Sekolah', size: 20 })] }), new Paragraph({ text: '' }), new Paragraph({ text: '' }), new Paragraph({ children: [new TextRun({ text: '____________________________________', size: 20 })] }), new Paragraph({ children: [new TextRun({ text: 'NBM. ……', size: 18 })] })] }),
-            new TableCell({ width: { size: 4800, type: WidthType.DXA }, borders: { top: { style: 'none' }, bottom: { style: 'none' }, left: { style: 'none' }, right: { style: 'none' } }, children: [new Paragraph({ children: [new TextRun({ text: 'Guru Mata Pelajaran', size: 20 })] }), new Paragraph({ text: '' }), new Paragraph({ text: '' }), new Paragraph({ children: [new TextRun({ text: '____________________________________', size: 20 })] }), new Paragraph({ children: [new TextRun({ text: 'NBM. ……', size: 18 })] })] }),
+            new TableCell({ width: { size: 4800, type: WidthType.DXA }, borders: { top: { style: 'none' }, bottom: { style: 'none' }, left: { style: 'none' }, right: { style: 'none' } }, children: [new Paragraph({ text: '' }), new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Mengetahui, Kepala Sekolah', size: 20 })] }), new Paragraph({ text: '' }), new Paragraph({ text: '' }), new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '____________________________________', size: 20 })] }), new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'NBM. ……', size: 18 })] })] }),
+            new TableCell({ width: { size: 4800, type: WidthType.DXA }, borders: { top: { style: 'none' }, bottom: { style: 'none' }, left: { style: 'none' }, right: { style: 'none' } }, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: d.titiMangsaFinal, size: 20 })] }), new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Guru Mata Pelajaran', size: 20 })] }), new Paragraph({ text: '' }), new Paragraph({ text: '' }), new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '____________________________________', size: 20 })] }), new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'NBM. ……', size: 18 })] })] }),
           ],
         }),
       ],

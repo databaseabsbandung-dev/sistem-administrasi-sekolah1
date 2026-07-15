@@ -17,7 +17,6 @@ export async function POST(request: NextRequest) {
       namaPenandatangan, nipPenandatangan, labelPenandatangan,
       distribusiTp,
     } = data
-    void hasilHari // (tidak dipakai di layout ini, disimpan untuk kompatibilitas payload lama)
 
     const PDFDocument = (await import('pdfkit')).default
 
@@ -64,14 +63,18 @@ export async function POST(request: NextRequest) {
           doc.rect(x, yPos, cells.reduce((s, c) => s + c.width, 0), tinggi).fill(HEADER_BG)
         }
 
-        // Garis kolom (vertikal) + isi teks
+        // Garis kolom (vertikal) + isi teks -- teks header diposisikan tepat DI
+        // TENGAH baris secara vertikal (bukan menempel di atas), supaya header
+        // yang teksnya sempat membungkus 2 baris tetap terlihat center.
         let cx = x
         cells.forEach(c => {
           doc.rect(cx, yPos, c.width, tinggi).stroke(borderColor)
+          const tinggiTeks = doc.heightOfString(c.text || '', { width: c.width - PAD * 2 })
+          const yTeks = yPos + Math.max(PAD - 1, (tinggi - tinggiTeks) / 2)
           doc.fillColor(c.color || DARK)
             .font(header || c.bold ? FONT_BOLD : FONT_REG)
             .fontSize(9)
-            .text(c.text || '', cx + PAD, yPos + PAD - 1, { width: c.width - PAD * 2, align: c.align || 'left' })
+            .text(c.text || '', cx + PAD, yTeks, { width: c.width - PAD * 2, align: c.align || 'left' })
           cx += c.width
         })
         doc.fillColor(DARK)
@@ -106,10 +109,6 @@ export async function POST(request: NextRequest) {
         .text('PERHITUNGAN MINGGU/JAM EFEKTIF', L, y, { width: W, align: 'center' })
       y += 18
 
-      doc.font(FONT_BOLD).fontSize(11)
-        .text('A. PERHITUNGAN JAM EFEKTIF', L, y)
-      y += 14
-
       // ── I & II BERDAMPINGAN (2 kolom) ──
       const colGap = 10
       const colW = (W - colGap) / 2
@@ -136,7 +135,7 @@ export async function POST(request: NextRequest) {
       let yy = yTabelAwal
       yy = drawRow(col1X, yy, [
         { text: 'No', width: c1w[0], align: 'center' },
-        { text: 'Bulan', width: c1w[1] },
+        { text: 'Bulan', width: c1w[1], align: 'center' },
         { text: 'Jml. Minggu', width: c1w[2], align: 'center' },
       ], { header: true })
 
@@ -171,14 +170,14 @@ export async function POST(request: NextRequest) {
 
       yy = yTabelAwal
       yy = drawRow(col2X, yy, [
-        { text: 'Bulan', width: c2w[0] },
-        { text: 'Kegiatan', width: c2w[1] },
+        { text: 'Bulan', width: c2w[0], align: 'center' },
+        { text: 'Kegiatan', width: c2w[1], align: 'center' },
         { text: 'Jml. Minggu', width: c2w[2], align: 'center' },
       ], { header: true })
 
       let totalTE = 0
       if (teEntries.length === 0) {
-        yy = drawRow(col2X, yy, [{ text: 'Tidak ada minggu tidak efektif', width: colW, align: 'center', color: '#6b7280' }])
+        yy = drawRow(col2X, yy, [{ text: 'Tidak ada minggu tidak efektif', width: colW, align: 'center', color: '#000000' }])
       } else {
         teEntries.forEach(([, v]) => {
           const kegiatanTxt = [...v.kegiatan].join(', ') || '-'
@@ -210,65 +209,91 @@ export async function POST(request: NextRequest) {
       doc.font(FONT_BOLD).fontSize(10.5).text(`= ${mingguEfektif} Minggu`, L + 15, y)
       y += 18
 
-      const jpMgg = jpPerMinggu || 0
-      const totalJp = mingguEfektif * jpMgg
-      doc.font(FONT_BOLD).fontSize(10)
-        .text('IV. JUMLAH JAM EFEKTIF', L, y, { continued: true })
-        .font(FONT_REG).text('= Jumlah Minggu Efektif x Jumlah Jam Pelajaran', { continued: false })
-      y += 12
-      doc.font(FONT_REG).fontSize(10).text(`= ${mingguEfektif} x ${jpMgg} Jam Pelajaran/Minggu`, L + 15, y)
-      y += 12
-      doc.font(FONT_BOLD).fontSize(10.5).text(`= ${totalJp} Jam Pelajaran`, L + 15, y)
-      y += 26
+      // "Jumlah Hari Efektif" & "Jumlah Jam Efektif" (IV & V) HANYA relevan untuk
+      // unduhan per Mapel (hasilHari terisi) -- konsepnya memang berbasis jadwal
+      // mengajar satu guru/mapel per hari, tidak berlaku di level Lembaga. Untuk
+      // unduhan Lembaga/Unit/Kelas (tanpa hasilHari), penomoran cukup berhenti di III.
+      const adaHariEfektif = typeof hasilHari?.totalHariMengajar === 'number'
+      if (adaHariEfektif) {
+        const perHariTxt = Array.isArray(hasilHari?.perHari)
+          ? hasilHari.perHari.map((h: { hari: string; jumlah: number }) => `${h.hari}(${h.jumlah}x)`).join(', ')
+          : ''
+        doc.font(FONT_BOLD).fontSize(10)
+          .text('IV. JUMLAH HARI EFEKTIF', L, y, { continued: true })
+          .font(FONT_REG).text('= Jumlah hari mengajar yang tidak kena libur (dijumlahkan per minggu)', { continued: false })
+        y += 12
+        doc.font(FONT_BOLD).fontSize(10.5).text(`= ${hasilHari.totalHariMengajar} Hari`, L + 15, y, { continued: true })
+        doc.font(FONT_REG).fontSize(9).text(perHariTxt ? ` (${perHariTxt})` : '', { continued: false })
+        y += 18
+
+        const totalJpPresisi = typeof hasilHari?.totalJpEfektif === 'number' ? hasilHari.totalJpEfektif : null
+        const totalJp = totalJpPresisi !== null ? totalJpPresisi : mingguEfektif * (jpPerMinggu || 0)
+        doc.font(FONT_BOLD).fontSize(10)
+          .text('V. JUMLAH JAM EFEKTIF', L, y, { continued: true })
+          .font(FONT_REG).text('= Jumlah JP pada tiap hari mengajar yang tidak kena libur', { continued: false })
+        y += 12
+        doc.font(FONT_REG).fontSize(9).text('(dihitung dari Jadwal Pelajaran per hari, bukan sekadar minggu x JP/minggu)', L + 15, y)
+        y += 12
+        doc.font(FONT_BOLD).fontSize(10.5).text(`= ${totalJp} Jam Pelajaran`, L + 15, y)
+        y += 26
+      } else {
+        y += 8
+      }
 
       // ── TANDA TANGAN ──────────────────────────────────────
-      // Aturan penempatan (berlaku sama di SEMUA dokumen unduhan):
-      // Kepala Sekolah/Mudir ("Mengetahui") SELALU di KIRI. Pihak lain
-      // (Guru Mapel, Waka Kurikulum, dst) SELALU di KANAN -- dan titi
-      // mangsa sejajar dengan pihak KANAN itu. Tidak ada garis TTD.
-      if (y > doc.page.height - 160) { doc.addPage(); y = 50 }
-
-      const kolomKiriX = L
-      const kolomKiriW = W / 2 - 10
-      const kolomKananX = L + W / 2
-      const kolomKananW = W / 2
-
-      const tanggalHariIni = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
-      const titiMangsaFinal = titiMangsa || `${kota || 'Bandung'}, ${tanggalHariIni}`
-      doc.font(FONT_REG).fontSize(10.5).fillColor(DARK)
+      // HANYA untuk unduhan per Mapel/Guru (namaGuru terisi) -- laporan Lembaga
+      // (Pusat/Unit/Kelas, tanpa guru/mapel spesifik) sekadar rekap jumlah
+      // minggu, tidak perlu ditandatangani Kepala Sekolah/Mudir maupun titimangsa.
       if (namaGuru) {
-        // Sejajar (rata kiri, titik X sama persis) dengan label "Guru Mata
-        // Pelajaran," di bawahnya -- pihak KANAN blok tanda tangan.
-        doc.text(titiMangsaFinal, kolomKananX, y, { width: kolomKananW })
-      } else {
-        doc.text(titiMangsaFinal, L, y, { width: W, align: 'right' })
-      }
-      y += 16
+        // Aturan penempatan (berlaku sama di SEMUA dokumen unduhan):
+        // Kepala Sekolah/Mudir ("Mengetahui") SELALU di KIRI. Pihak lain
+        // (Guru Mapel, Waka Kurikulum, dst) SELALU di KANAN -- dan titi
+        // mangsa sejajar dengan pihak KANAN itu. Tidak ada garis TTD.
+        if (y > doc.page.height - 185) { doc.addPage(); y = 50 }
 
-      doc.text('Mengetahui,', kolomKiriX, y)
-      y += 12
+        // Kolom dilebarkan (gutter tengah diperkecil dari 10 ke 6, lebar teks nama
+        // guru tidak lagi dipotong -20) supaya ruang membubuhkan tanda tangan basah
+        // lebih leluasa.
+        const kolomKiriX = L
+        const kolomKiriW = W / 2 - 6
+        const kolomKananX = L + W / 2 + 6
+        const kolomKananW = W / 2 - 6
 
-      const ttdY = y
-      doc.font(FONT_REG).fontSize(10.5)
-      doc.text(`${labelPenandatangan || 'Kepala Sekolah'},`, kolomKiriX, ttdY)
-      if (namaGuru) doc.text('Guru Mata Pelajaran,', kolomKananX, ttdY)
+        const tanggalHariIni = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+        const titiMangsaFinal = titiMangsa || `${kota || 'Bandung'}, ${tanggalHariIni}`
+        doc.font(FONT_REG).fontSize(10.5).fillColor(DARK)
+        // Blok KIRI (Kepala Sekolah/Mudir) tetap di sisi KIRI halaman, blok KANAN
+        // (Guru Mapel) tetap di sisi KANAN -- tapi teks di dalam masing-masing
+        // kolom rata TENGAH (center) terhadap lebar kolomnya sendiri, bukan rata
+        // kiri/kanan mentah, supaya blok tanda tangan terlihat rapi di tengah
+        // "ruang"-nya masing-masing.
+        doc.text(titiMangsaFinal, kolomKananX, y, { width: kolomKananW, align: 'center' })
+        y += 16
 
-      // Tanpa garis TTD -- langsung nama, jarak vertikal cukup untuk "tanda tangan basah".
-      const namaY = ttdY + 42
+        doc.text('Mengetahui,', kolomKiriX, y, { width: kolomKiriW, align: 'center' })
+        y += 12
 
-      doc.font(FONT_BOLD).fontSize(10.5)
-        .text(namaPenandatangan || '', kolomKiriX, namaY, { width: kolomKiriW })
-      // Mudir (Lembaga Pusat) TIDAK pakai NUPTK. Kepala Sekolah Unit tetap pakai.
-      if (labelPenandatangan !== 'Mudir') {
-        doc.font(FONT_REG).fontSize(9.5)
-          .text(`NUPTK: ${nipPenandatangan || '-'}`, kolomKiriX, namaY + 12, { width: kolomKiriW })
-      }
+        const ttdY = y
+        doc.font(FONT_REG).fontSize(10.5)
+        doc.text(`${labelPenandatangan || 'Kepala Sekolah'},`, kolomKiriX, ttdY, { width: kolomKiriW, align: 'center' })
+        doc.text('Guru Mata Pelajaran,', kolomKananX, ttdY, { width: kolomKananW, align: 'center' })
 
-      if (namaGuru) {
+        // Tanpa garis TTD -- langsung nama, jarak vertikal diperbesar (42 -> 65px)
+        // supaya ruang membubuhkan tanda tangan basah lebih leluasa.
+        const namaY = ttdY + 65
+
         doc.font(FONT_BOLD).fontSize(10.5)
-          .text(namaGuru, kolomKananX, namaY, { width: kolomKananW - 20 })
+          .text(namaPenandatangan || '', kolomKiriX, namaY, { width: kolomKiriW, align: 'center' })
+        // Mudir (Lembaga Pusat) TIDAK pakai NUPTK. Kepala Sekolah Unit tetap pakai.
+        if (labelPenandatangan !== 'Mudir') {
+          doc.font(FONT_REG).fontSize(9.5)
+            .text(`NUPTK: ${nipPenandatangan || '-'}`, kolomKiriX, namaY + 12, { width: kolomKiriW, align: 'center' })
+        }
+
+        doc.font(FONT_BOLD).fontSize(10.5)
+          .text(namaGuru, kolomKananX, namaY, { width: kolomKananW, align: 'center' })
         doc.font(FONT_REG).fontSize(9.5)
-          .text(`NUPTK: ${nuptkGuru || '-'}`, kolomKananX, namaY + 12, { width: kolomKananW - 20 })
+          .text(`NUPTK: ${nuptkGuru || '-'}`, kolomKananX, namaY + 12, { width: kolomKananW, align: 'center' })
       }
 
       doc.end()

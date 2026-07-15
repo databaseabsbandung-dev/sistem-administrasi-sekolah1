@@ -270,21 +270,23 @@ export async function POST(request: NextRequest) {
       pageCheck(80)
       y += 10
       const now = new Date()
+      const colTtdW = 130
       const col1X = L + 30
       const col2X = L + W - 160
 
-      // Kepala Sekolah ("Mengetahui") SELALU di KIRI, Guru Mapel di KANAN
-      // -- titimangsa sejajar kolom KANAN (Guru). Tanpa garis TTD.
-      txt('Mengetahui,', col1X, y, { size: 8, color: DARK })
+      // Kepala Sekolah ("Mengetahui") SELALU di KIRI, Guru Mapel di KANAN --
+      // titimangsa sejajar kolom KANAN (Guru). Tanpa garis TTD. Teks di dalam
+      // masing-masing kolom rata TENGAH terhadap lebar kolomnya sendiri.
+      txt('Mengetahui,', col1X, y, { size: 8, color: DARK, w: colTtdW, align: 'center' })
       txt(`${namaSekolah || 'Bandung'}, ${now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`,
-        col2X, y, { size: 8, color: GRAY, w: 130 })
+        col2X, y, { size: 8, color: GRAY, w: colTtdW, align: 'center' })
       y += 10
-      txt('Kepala Sekolah,', col1X, y, { size: 8, color: DARK })
-      txt('Guru Mata Pelajaran,', col2X, y, { size: 8, color: DARK })
+      txt('Kepala Sekolah,', col1X, y, { size: 8, color: DARK, w: colTtdW, align: 'center' })
+      txt('Guru Mata Pelajaran,', col2X, y, { size: 8, color: DARK, w: colTtdW, align: 'center' })
       y += 46
-      txt('', col1X, y, { size: 7.5, color: DARK })
-      txt(namaGuru || '', col2X, y, { size: 7.5, bold: !!namaGuru, color: DARK })
-      if (namaGuru) txt('NUPTK: -', col2X, y + 10, { size: 7, color: GRAY })
+      txt('', col1X, y, { size: 7.5, color: DARK, w: colTtdW, align: 'center' })
+      txt(namaGuru || '', col2X, y, { size: 7.5, bold: !!namaGuru, color: DARK, w: colTtdW, align: 'center' })
+      if (namaGuru) txt('NUPTK: -', col2X, y + 10, { size: 7, color: GRAY, w: colTtdW, align: 'center' })
 
       // ── PAGE NUMBERS ──────────────────────────────────────
       const range = doc.bufferedPageRange()
