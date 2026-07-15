@@ -109,10 +109,11 @@ export default function DashboardPage() {
             .select('value')
             .eq('key', 'master_tahun_ajaran')
             .maybeSingle()
-          if (rowTa?.value) {
-            JSON.parse(rowTa.value) // validasi dulu -- jangan dipakai kalau ternyata rusak/bukan JSON valid
-            storedTa = rowTa.value
-            localStorage.setItem('master_tahun_ajaran', storedTa)
+          const nilaiTa: string | undefined = (rowTa?.value as string | undefined) ?? undefined
+          if (nilaiTa) {
+            JSON.parse(nilaiTa) // validasi dulu -- jangan dipakai kalau ternyata rusak/bukan JSON valid
+            storedTa = nilaiTa
+            localStorage.setItem('master_tahun_ajaran', nilaiTa)
           }
         } catch (e) {
           console.warn('Gagal memuat master_tahun_ajaran langsung dari cloud, memakai cache localStorage (jika ada):', e)
