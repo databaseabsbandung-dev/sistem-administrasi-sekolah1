@@ -684,6 +684,25 @@ export default function CpTpAtpPage() {
           })
         }
 
+        // Lebar tiap kolom MENYESUAIKAN banyak teksnya sendiri (bukan persentase tetap) --
+        // dihitung dari total panjang karakter semua isi kolom itu di dataset yang sedang
+        // dicetak, supaya kolom seperti Elemen (biasanya cuma 1-2 kata) tidak diberi jatah
+        // lebar yang sama besarnya dengan Capaian Pembelajaran/Tujuan Pembelajaran yang jauh
+        // lebih panjang -- mengurangi ruang kosong di kolom pendek. Dibatasi minimum 8% &
+        // maksimum 45% per kolom supaya tetap wajar walau datanya ekstrem (mis. kosong semua).
+        const hitungLebarKolom = (): number[] => {
+          const totalPanjang = [0, 1, 2, 3].map(kolom =>
+            bodyCp.reduce((jumlah, baris) => jumlah + String(baris[kolom] ?? '').length, 0)
+          )
+          const jumlahSemua = totalPanjang.reduce((a, b) => a + b, 0) || 1
+          const batasBawah = 0.08, batasAtas = 0.45
+          let proporsi = totalPanjang.map(p => Math.min(batasAtas, Math.max(batasBawah, p / jumlahSemua)))
+          const jumlahProporsi = proporsi.reduce((a, b) => a + b, 0)
+          proporsi = proporsi.map(p => p / jumlahProporsi) // normalisasi ulang supaya totalnya tetap 100%
+          return proporsi.map(p => contentWidth * p)
+        }
+        const [lebarElemen, lebarCp, lebarMateri, lebarTp] = hitungLebarKolom()
+
         // Ingat nilai + nomor halaman baris SEBELUMNYA per kolom (0=Elemen, 1=Capaian
         // Pembelajaran, 2=Lingkup Materi) -- direset otomatis tiap kali fungsi ini
         // dipanggil ulang karena dideklarasikan di dalam handleDownloadPdf.
@@ -714,10 +733,10 @@ export default function CpTpAtpPage() {
           styles: { font: 'times', fontSize: 10.5, cellPadding: 3, lineColor: [0, 0, 0], lineWidth: 0.15, valign: 'top', textColor: [0, 0, 0] },
           headStyles: { fillColor: [237, 227, 243], textColor: [0, 0, 0], font: 'times', fontStyle: 'bold' },
           columnStyles: {
-            0: { cellWidth: contentWidth * 0.14 },
-            1: { cellWidth: contentWidth * 0.30 },
-            2: { cellWidth: contentWidth * 0.20 },
-            3: { cellWidth: contentWidth * 0.36 },
+            0: { cellWidth: lebarElemen },
+            1: { cellWidth: lebarCp },
+            2: { cellWidth: lebarMateri },
+            3: { cellWidth: lebarTp },
           },
           willDrawCell: (data: any) => {
             if (data.section !== 'body' || data.column.index > 2) return
@@ -726,9 +745,13 @@ export default function CpTpAtpPage() {
             const sebelumnya = barisSebelumnya[kolom]
             const lanjutanGabungan = !!sebelumnya && sebelumnya.nilai === nilai && sebelumnya.halaman === data.pageNumber
             if (lanjutanGabungan) data.cell.text = []
-            // Baris terpotong (split ke halaman lain oleh autoTable) diberi index -1 --
-            // tidak ada acuan di array asli, jadi garis bawahnya dibiarkan normal (aman).
-            const gabungKeBawah = data.row.index >= 0 ? menyatuDenganBerikutnya[data.row.index]?.[kolom] : false
+            // Baris terpotong (split ke halaman lain oleh autoTable) diberi index -1, dan
+            // baris yang KONTEN-nya sendiri kepanjangan sampai disambung ke halaman lain
+            // ditandai row.spansMultiplePages -- keduanya SENGAJA tidak boleh disembunyikan
+            // garis bawahnya, supaya garis di ujung halaman tidak pernah hilang.
+            const gabungKeBawah = data.row.index >= 0 && !data.row.spansMultiplePages
+              ? menyatuDenganBerikutnya[data.row.index]?.[kolom]
+              : false
             data.cell.styles.lineWidth = {
               top: lanjutanGabungan ? 0 : 0.15,
               bottom: gabungKeBawah ? 0 : 0.15,
