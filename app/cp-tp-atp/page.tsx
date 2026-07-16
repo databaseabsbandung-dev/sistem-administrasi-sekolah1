@@ -684,39 +684,54 @@ export default function CpTpAtpPage() {
           })
         }
 
-        // Lebar tiap kolom MENYESUAIKAN banyak teksnya sendiri (bukan persentase tetap) --
-        // dihitung dari total panjang karakter semua isi kolom itu di dataset yang sedang
-        // dicetak, supaya kolom seperti Elemen (biasanya cuma 1-2 kata) tidak diberi jatah
-        // lebar yang sama besarnya dengan Capaian Pembelajaran/Tujuan Pembelajaran yang jauh
-        // lebih panjang -- mengurangi ruang kosong di kolom pendek. Dibatasi minimum 8% &
-        // maksimum 45% per kolom supaya tetap wajar walau datanya ekstrem (mis. kosong semua).
+        // Lebar tiap kolom MENYESUAIKAN banyak teksnya sendiri (bukan persentase tetap).
+        // Kolom Elemen/Capaian Pembelajaran/Lingkup Materi (0,1,2) DIGABUNG kalau nilainya
+        // sama beruntun (lihat willDrawCell di bawah) -- jadi panjang teksnya dihitung HANYA
+        // SEKALI per grup, bukan diulang di setiap baris Lingkup Materi seperti data
+        // mentahnya. Tanpa ini, Capaian Pembelajaran (yang aslinya diulang di data walau
+        // tampilannya digabung) dianggap butuh ruang jauh lebih besar dari kenyataannya,
+        // sampai "merebut" jatah lebar Tujuan Pembelajaran yang justru BEDA di tiap baris.
+        // Dibatasi rentang wajar per kolom (bukan cuma satu batas sama rata) supaya kolom
+        // pendek tidak kosong melompong & kolom panjang tidak kebagian sempit.
+        const panjangUnikBerurutan = (kolom: number): number => {
+          let total = 0
+          for (let i = 0; i < bodyCp.length; i++) {
+            if (i === 0 || bodyCp[i][kolom] !== bodyCp[i - 1][kolom]) total += String(bodyCp[i][kolom] ?? '').length
+          }
+          return total
+        }
         const hitungLebarKolom = (): number[] => {
-          const totalPanjang = [0, 1, 2, 3].map(kolom =>
-            bodyCp.reduce((jumlah, baris) => jumlah + String(baris[kolom] ?? '').length, 0)
-          )
+          const totalPanjang = [
+            panjangUnikBerurutan(0), // Elemen -- digabung
+            panjangUnikBerurutan(1), // Capaian Pembelajaran -- digabung
+            panjangUnikBerurutan(2), // Lingkup Materi -- digabung
+            bodyCp.reduce((jumlah, baris) => jumlah + String(baris[3] ?? '').length, 0), // Tujuan Pembelajaran -- selalu beda tiap baris
+          ]
           const jumlahSemua = totalPanjang.reduce((a, b) => a + b, 0) || 1
-          const batasBawah = 0.08, batasAtas = 0.45
-          let proporsi = totalPanjang.map(p => Math.min(batasAtas, Math.max(batasBawah, p / jumlahSemua)))
+          const rentang = [
+            { min: 0.08, max: 0.15 }, // Elemen
+            { min: 0.15, max: 0.32 }, // Capaian Pembelajaran
+            { min: 0.08, max: 0.20 }, // Lingkup Materi
+            { min: 0.30, max: 0.55 }, // Tujuan Pembelajaran
+          ]
+          let proporsi = totalPanjang.map((p, i) => Math.min(rentang[i].max, Math.max(rentang[i].min, p / jumlahSemua)))
           const jumlahProporsi = proporsi.reduce((a, b) => a + b, 0)
           proporsi = proporsi.map(p => p / jumlahProporsi) // normalisasi ulang supaya totalnya tetap 100%
           return proporsi.map(p => contentWidth * p)
         }
         const [lebarElemen, lebarCp, lebarMateri, lebarTp] = hitungLebarKolom()
 
-        // Ingat nilai + nomor halaman baris SEBELUMNYA per kolom (0=Elemen, 1=Capaian
-        // Pembelajaran, 2=Lingkup Materi) -- direset otomatis tiap kali fungsi ini
-        // dipanggil ulang karena dideklarasikan di dalam handleDownloadPdf.
-        const barisSebelumnya: Record<number, { nilai: string; halaman: number } | null> = { 0: null, 1: null, 2: null }
-
-        // Dihitung SEKALI di depan (bukan bergantung ke halaman): baris ke-i pada kolom
-        // itu bernilai sama dengan baris ke-(i+1) atau tidak -- dipakai untuk menyembunyikan
-        // garis BAWAH baris ke-i supaya tidak ada garis di tengah blok gabungan. Kalau
-        // ternyata baris ke-(i+1) itu kebetulan jatuh di halaman baru, baris ke-i otomatis
-        // jadi baris PALING BAWAH pada halamannya -- kehilangan garis bawah di situ jauh
-        // lebih wajar dilihat (mepet ujung halaman) daripada garis nongol di tengah blok.
-        const menyatuDenganBerikutnya: boolean[][] = bodyCp.map((baris: any[], i: number) => {
+        // Dihitung SEKALI di depan, murni dari data (TIDAK bergantung nomor halaman sama
+        // sekali) -- baris ke-i pada kolom itu adalah AWAL grup (beda dari baris sebelumnya)
+        // atau AKHIR grup (beda dari baris berikutnya). Dipakai untuk kolom 0=Elemen,
+        // 1=Capaian Pembelajaran, 2=Lingkup Materi.
+        const awalGrup: boolean[][] = bodyCp.map((baris: any[], i: number) => {
+          const sebelumnya = bodyCp[i - 1]
+          return [0, 1, 2].map(kolom => i === 0 || !sebelumnya || baris[kolom] !== sebelumnya[kolom])
+        })
+        const akhirGrup: boolean[][] = bodyCp.map((baris: any[], i: number) => {
           const berikutnya = bodyCp[i + 1]
-          return [0, 1, 2].map(kolom => !!berikutnya && baris[kolom] === berikutnya[kolom])
+          return [0, 1, 2].map(kolom => !berikutnya || baris[kolom] !== berikutnya[kolom])
         })
 
         autoTable(doc, {
@@ -738,27 +753,38 @@ export default function CpTpAtpPage() {
             2: { cellWidth: lebarMateri },
             3: { cellWidth: lebarTp },
           },
+          // Teks baris "lanjutan" (bukan awal grup) DIKOSONGKAN DI SINI, sebelum jspdf-autotable
+          // menghitung tinggi baris & keputusan pindah halaman -- supaya baris kosong itu
+          // benar-benar dianggap SETINGGI 0 oleh library, bukan tetap dianggap setinggi teks
+          // aslinya (yang belum dikosongkan) lalu baru "disembunyikan" belakangan waktu
+          // digambar. Kalau dikosongkan belakangan (waktu digambar/willDrawCell), library
+          // sudah keburu salah hitung tinggi & bisa salah memotong halaman di tengah baris
+          // yang harusnya kosong itu, menyisakan potongan teks nyempil sebagai garis/teks
+          // liar di halaman berikutnya.
+          didParseCell: (data: any) => {
+            if (data.section !== 'body' || data.column.index > 2) return
+            if (data.row.index >= 0 && !awalGrup[data.row.index][data.column.index]) {
+              data.cell.text = []
+            }
+          },
+          // Garis kolom 0/1/2 dibuat menyatu (tanpa garis di tengah) murni dari data yang
+          // sama seperti di atas -- baris bukan-awal-grup tidak digambar garis ATAS-nya,
+          // baris bukan-akhir-grup tidak digambar garis BAWAH-nya. row.spansMultiplePages
+          // (baris yang kontennya sendiri genuinely kepanjangan sampai perlu disambung ke
+          // halaman lain) SENGAJA dikecualikan supaya garis di ujung halaman itu tidak
+          // pernah ikut disembunyikan.
           willDrawCell: (data: any) => {
             if (data.section !== 'body' || data.column.index > 2) return
             const kolom = data.column.index
-            const nilai = String(data.cell.raw ?? '')
-            const sebelumnya = barisSebelumnya[kolom]
-            const lanjutanGabungan = !!sebelumnya && sebelumnya.nilai === nilai && sebelumnya.halaman === data.pageNumber
-            if (lanjutanGabungan) data.cell.text = []
-            // Baris terpotong (split ke halaman lain oleh autoTable) diberi index -1, dan
-            // baris yang KONTEN-nya sendiri kepanjangan sampai disambung ke halaman lain
-            // ditandai row.spansMultiplePages -- keduanya SENGAJA tidak boleh disembunyikan
-            // garis bawahnya, supaya garis di ujung halaman tidak pernah hilang.
-            const gabungKeBawah = data.row.index >= 0 && !data.row.spansMultiplePages
-              ? menyatuDenganBerikutnya[data.row.index]?.[kolom]
-              : false
+            const i = data.row.index
+            const bukanAwal = i >= 0 && !awalGrup[i][kolom]
+            const bukanAkhir = i >= 0 && !akhirGrup[i][kolom] && !data.row.spansMultiplePages
             data.cell.styles.lineWidth = {
-              top: lanjutanGabungan ? 0 : 0.15,
-              bottom: gabungKeBawah ? 0 : 0.15,
+              top: bukanAwal ? 0 : 0.15,
+              bottom: bukanAkhir ? 0 : 0.15,
               left: 0.15,
               right: 0.15,
             }
-            barisSebelumnya[kolom] = { nilai, halaman: data.pageNumber }
           },
         })
       } else {
