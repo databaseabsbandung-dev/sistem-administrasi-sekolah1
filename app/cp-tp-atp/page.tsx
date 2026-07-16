@@ -658,14 +658,17 @@ export default function CpTpAtpPage() {
       let judulDokumen = ''
       if (halaman === 'analisis') {
         // ═══════════════ ANALISIS CAPAIAN PEMBELAJARAN ═══════════════
-        // Satu baris per Lingkup Materi (bukan per CP). Data mentahnya SELALU lengkap di
-        // setiap baris (tidak pakai rowSpan bawaan jspdf-autotable -- itu yang bikin garis
-        // & isi sel hilang kalau sel gabungan kepotong ke halaman lain). Efek "sel gabungan"
-        // (Elemen / Capaian Pembelajaran / Lingkup Materi yang sama tidak diulang teksnya)
-        // dibuat sendiri lewat hook willDrawCell di bawah: baris & garisnya tetap sungguhan
-        // (jadi border TIDAK PERNAH hilang), cuma teks yang identik dengan baris tepat di
-        // atasnya PADA HALAMAN YANG SAMA yang dikosongkan. Kalau kebetulan baris yang sama
-        // itu mulai di halaman baru, teksnya sengaja ditulis ulang supaya tetap ada konteks.
+        // Tiap CP dapat baris "header" SENDIRI berisi Elemen + Capaian Pembelajaran saja
+        // (Lingkup Materi & Tujuan Pembelajaran dikosongkan di baris itu) -- supaya tinggi
+        // baris header ini HANYA mengikuti kebutuhan CP-nya sendiri, tidak dipaksa ikut
+        // setinggi Tujuan Pembelajaran milik Materi pertama seperti desain sebelumnya
+        // (itu penyebab ruang kosong besar: paragraf CP yang panjang membuat SATU baris
+        // materi pertama jadi sangat tinggi, padahal isi kolom Materi/TP-nya sendiri
+        // pendek). Baris-baris Materi di bawahnya HANYA berisi Lingkup Materi + Tujuan
+        // Pembelajaran (Elemen/CP dikosongkan langsung di data, BUKAN rowSpan bawaan
+        // jspdf-autotable -- itu yang bikin garis & isi sel hilang kalau sel gabungan
+        // kepotong ke halaman lain), jadi tinggi tiap baris Materi murni mengikuti
+        // panjang Tujuan Pembelajarannya sendiri.
         judulDokumen = 'Analisis Capaian Pembelajaran'
         const y1 = tulisKopHalaman('ANALISIS CAPAIAN PEMBELAJARAN')
 
@@ -675,38 +678,32 @@ export default function CpTpAtpPage() {
         } else {
           cp.forEach(c => {
             const materiUntukCp = materi.filter(m => m.cpId === c.id)
-            const daftarBaris = materiUntukCp.length > 0 ? materiUntukCp : [null]
-            daftarBaris.forEach(m => {
-              const tpUntukMateri = m ? tp.filter(t => t.materiId === m.id) : []
+            if (materiUntukCp.length === 0) {
+              // Belum ada Materi sama sekali untuk CP ini -- cukup satu baris saja,
+              // tidak perlu baris header terpisah karena tidak ada apa pun di bawahnya.
+              bodyCp.push([c.elemen || '-', c.deskripsi, '-', '-'])
+              return
+            }
+            bodyCp.push([c.elemen || '-', c.deskripsi, '', ''])
+            materiUntukCp.forEach(m => {
+              const tpUntukMateri = tp.filter(t => t.materiId === m.id)
               const tpTeks = tpUntukMateri.length > 0 ? tpUntukMateri.map(t => `•  ${t.deskripsi}`).join('\n') : '-'
-              bodyCp.push([c.elemen || '-', c.deskripsi, m ? m.nama : '-', tpTeks])
+              bodyCp.push(['', '', m.nama, tpTeks])
             })
           })
         }
 
-        // Lebar tiap kolom MENYESUAIKAN banyak teksnya sendiri (bukan persentase tetap).
-        // Kolom Elemen/Capaian Pembelajaran/Lingkup Materi (0,1,2) DIGABUNG kalau nilainya
-        // sama beruntun (lihat willDrawCell di bawah) -- jadi panjang teksnya dihitung HANYA
-        // SEKALI per grup, bukan diulang di setiap baris Lingkup Materi seperti data
-        // mentahnya. Tanpa ini, Capaian Pembelajaran (yang aslinya diulang di data walau
-        // tampilannya digabung) dianggap butuh ruang jauh lebih besar dari kenyataannya,
-        // sampai "merebut" jatah lebar Tujuan Pembelajaran yang justru BEDA di tiap baris.
-        // Dibatasi rentang wajar per kolom (bukan cuma satu batas sama rata) supaya kolom
-        // pendek tidak kosong melompong & kolom panjang tidak kebagian sempit.
-        const panjangUnikBerurutan = (kolom: number): number => {
-          let total = 0
-          for (let i = 0; i < bodyCp.length; i++) {
-            if (i === 0 || bodyCp[i][kolom] !== bodyCp[i - 1][kolom]) total += String(bodyCp[i][kolom] ?? '').length
-          }
-          return total
-        }
+        // Lebar tiap kolom MENYESUAIKAN banyak teksnya sendiri (bukan persentase tetap) --
+        // dihitung dari total panjang karakter semua isi kolom itu di dataset yang sedang
+        // dicetak. Karena Elemen/Capaian Pembelajaran kini HANYA muncul sekali per CP
+        // (baris header di atas, bukan diulang di tiap baris Materi lagi), penjumlahan
+        // panjang teksnya sudah otomatis mencerminkan kebutuhan ruang yang sebenarnya.
+        // Dibatasi rentang wajar per kolom supaya kolom pendek tidak kosong melompong &
+        // kolom panjang tidak kebagian sempit.
         const hitungLebarKolom = (): number[] => {
-          const totalPanjang = [
-            panjangUnikBerurutan(0), // Elemen -- digabung
-            panjangUnikBerurutan(1), // Capaian Pembelajaran -- digabung
-            panjangUnikBerurutan(2), // Lingkup Materi -- digabung
-            bodyCp.reduce((jumlah, baris) => jumlah + String(baris[3] ?? '').length, 0), // Tujuan Pembelajaran -- selalu beda tiap baris
-          ]
+          const totalPanjang = [0, 1, 2, 3].map(kolom =>
+            bodyCp.reduce((jumlah, baris) => jumlah + String(baris[kolom] ?? '').length, 0)
+          )
           const jumlahSemua = totalPanjang.reduce((a, b) => a + b, 0) || 1
           const rentang = [
             { min: 0.08, max: 0.15 }, // Elemen
@@ -720,19 +717,6 @@ export default function CpTpAtpPage() {
           return proporsi.map(p => contentWidth * p)
         }
         const [lebarElemen, lebarCp, lebarMateri, lebarTp] = hitungLebarKolom()
-
-        // Dihitung SEKALI di depan, murni dari data (TIDAK bergantung nomor halaman sama
-        // sekali) -- baris ke-i pada kolom itu adalah AWAL grup (beda dari baris sebelumnya)
-        // atau AKHIR grup (beda dari baris berikutnya). Dipakai untuk kolom 0=Elemen,
-        // 1=Capaian Pembelajaran, 2=Lingkup Materi.
-        const awalGrup: boolean[][] = bodyCp.map((baris: any[], i: number) => {
-          const sebelumnya = bodyCp[i - 1]
-          return [0, 1, 2].map(kolom => i === 0 || !sebelumnya || baris[kolom] !== sebelumnya[kolom])
-        })
-        const akhirGrup: boolean[][] = bodyCp.map((baris: any[], i: number) => {
-          const berikutnya = bodyCp[i + 1]
-          return [0, 1, 2].map(kolom => !berikutnya || baris[kolom] !== berikutnya[kolom])
-        })
 
         autoTable(doc, {
           startY: y1,
@@ -753,32 +737,23 @@ export default function CpTpAtpPage() {
             2: { cellWidth: lebarMateri },
             3: { cellWidth: lebarTp },
           },
-          // Teks baris "lanjutan" (bukan awal grup) DIKOSONGKAN DI SINI, sebelum jspdf-autotable
-          // menghitung tinggi baris & keputusan pindah halaman -- supaya baris kosong itu
-          // benar-benar dianggap SETINGGI 0 oleh library, bukan tetap dianggap setinggi teks
-          // aslinya (yang belum dikosongkan) lalu baru "disembunyikan" belakangan waktu
-          // digambar. Kalau dikosongkan belakangan (waktu digambar/willDrawCell), library
-          // sudah keburu salah hitung tinggi & bisa salah memotong halaman di tengah baris
-          // yang harusnya kosong itu, menyisakan potongan teks nyempil sebagai garis/teks
-          // liar di halaman berikutnya.
-          didParseCell: (data: any) => {
-            if (data.section !== 'body' || data.column.index > 2) return
-            if (data.row.index >= 0 && !awalGrup[data.row.index][data.column.index]) {
-              data.cell.text = []
-            }
-          },
-          // Garis kolom 0/1/2 dibuat menyatu (tanpa garis di tengah) murni dari data yang
-          // sama seperti di atas -- baris bukan-awal-grup tidak digambar garis ATAS-nya,
-          // baris bukan-akhir-grup tidak digambar garis BAWAH-nya. row.spansMultiplePages
-          // (baris yang kontennya sendiri genuinely kepanjangan sampai perlu disambung ke
-          // halaman lain) SENGAJA dikecualikan supaya garis di ujung halaman itu tidak
-          // pernah ikut disembunyikan.
+          // Kolom Elemen/Capaian Pembelajaran dibuat terlihat "menyatu" dari baris header
+          // sampai ke semua baris Materi di bawahnya -- garis BAWAH baris ini disembunyikan
+          // kalau baris BERIKUTNYA masih kosong di kolom yang sama (masih bagian dari CP
+          // yang sama), garis ATAS baris ini disembunyikan kalau baris ITU SENDIRI kosong
+          // (lanjutan). Semua murni dari isi data (bukan pelacakan halaman), jadi tidak
+          // bisa meleset walau kepotong ke halaman lain. row.spansMultiplePages (baris yang
+          // KONTEN-nya sendiri kepanjangan sampai disambung ke halaman lain) SENGAJA
+          // dikecualikan dari penyembunyian garis bawah, supaya garis di ujung halaman
+          // tidak pernah ikut hilang.
           willDrawCell: (data: any) => {
-            if (data.section !== 'body' || data.column.index > 2) return
+            if (data.section !== 'body' || data.column.index > 1) return
             const kolom = data.column.index
             const i = data.row.index
-            const bukanAwal = i >= 0 && !awalGrup[i][kolom]
-            const bukanAkhir = i >= 0 && !akhirGrup[i][kolom] && !data.row.spansMultiplePages
+            const barisIni = i >= 0 ? bodyCp[i] : null
+            const barisBerikutnya = i >= 0 ? bodyCp[i + 1] : null
+            const bukanAwal = !!barisIni && barisIni[kolom] === ''
+            const bukanAkhir = !!barisBerikutnya && barisBerikutnya[kolom] === '' && !data.row.spansMultiplePages
             data.cell.styles.lineWidth = {
               top: bukanAwal ? 0 : 0.15,
               bottom: bukanAkhir ? 0 : 0.15,
@@ -799,7 +774,10 @@ export default function CpTpAtpPage() {
           if (blok.items.length === 0) return
           bodyAtp.push([{ content: `KELAS ${blok.kelas}`, colSpan: 2, styles: { fontStyle: 'bold', fillColor: [245, 240, 248] } }])
           blok.items.forEach(it => {
-            bodyAtp.push([String(it.nomorGlobal), it.materiNama || it.tpDeskripsi || '-'])
+            // Yang dituliskan di tabel ATP adalah TUJUAN PEMBELAJARAN-nya (deskripsi TP),
+            // bukan nama Lingkup Materi -- materiNama cuma dipakai sebagai cadangan kalau
+            // deskripsi TP-nya kosong.
+            bodyAtp.push([String(it.nomorGlobal), it.tpDeskripsi || it.materiNama || '-'])
           })
         })
         if (bodyAtp.length === 0) bodyAtp.push(['-', 'Belum ada data ATP'])
@@ -813,8 +791,8 @@ export default function CpTpAtpPage() {
           ]],
           body: bodyAtp,
           theme: 'grid',
-          styles: { font: 'times', fontSize: 11, cellPadding: 3, lineColor: [0, 0, 0], lineWidth: 0.15, valign: 'top' },
-          headStyles: { fillColor: [237, 227, 243], textColor: [30, 10, 40], font: 'times', fontStyle: 'bold' },
+          styles: { font: 'times', fontSize: 11, cellPadding: 3, lineColor: [0, 0, 0], lineWidth: 0.15, valign: 'top', textColor: [0, 0, 0] },
+          headStyles: { fillColor: [237, 227, 243], textColor: [0, 0, 0], font: 'times', fontStyle: 'bold' },
           columnStyles: {
             0: { cellWidth: 16, halign: 'center' },
             1: { cellWidth: contentWidth - 16 },
