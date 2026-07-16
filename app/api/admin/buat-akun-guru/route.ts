@@ -4,8 +4,16 @@ import { createClient } from '@supabase/supabase-js'
 // WAJIB jalan di Node.js runtime (butuh service_role key, tidak boleh di edge/browser).
 export const runtime = 'nodejs'
 
-const SUPABASE_URL = 'https://whnwipppzjauxkmdiqfv.supabase.co'
-const SUPABASE_ANON_KEY = 'sb_publishable_szkotq6gG7TVSfBfIumxJQ_92oC5eoH'
+// PENTING: harus baca env var yang SAMA dengan app/supabase.ts (client login). Sebelumnya
+// nilai ini di-hardcode ke project produksi -- kalau deployment ini diarahkan ke project
+// Supabase LAIN lewat NEXT_PUBLIC_SUPABASE_URL/NEXT_PUBLIC_SUPABASE_ANON_KEY (mis. instance
+// sekolah sendiri, terpisah dari project bawaan), token sesi Admin yang dikirim dari
+// browser diterbitkan oleh project ITU, tapi selalu divalidasi ke project produksi yang
+// hardcode -- otomatis GAGAL terus dengan pesan "Sesi Admin tidak valid/kedaluwarsa"
+// walau Admin baru saja login ulang. Sinkronkan sumbernya supaya validasi token selalu
+// mengacu ke project Supabase yang BENAR-BENAR dipakai untuk login.
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://whnwipppzjauxkmdiqfv.supabase.co'
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_szkotq6gG7TVSfBfIumxJQ_92oC5eoH'
 
 /**
  * POST /api/admin/buat-akun-guru
