@@ -47,8 +47,20 @@ export async function POST(request: NextRequest) {
     const supabaseSebagaiPemanggil = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
     const { data: dataUser, error: errorUser } = await supabaseSebagaiPemanggil.auth.getUser(token)
     if (errorUser || !dataUser?.user) {
+      // Sertakan detail teknis (host Supabase yang dipakai server + pesan asli dari
+      // Supabase) di pesan error supaya kalau masih gagal SETELAH URL/anon key env var
+      // sudah benar, penyebab sesungguhnya (mis. token dari project lain, JWT format
+      // tidak cocok, dll) langsung kelihatan tanpa perlu tebak-tebakan lagi.
+      let hostDipakai = SUPABASE_URL
+      try { hostDipakai = new URL(SUPABASE_URL).host } catch { /* biarkan apa adanya */ }
       return NextResponse.json(
-        { error: 'Sesi Admin tidak valid/kedaluwarsa. Silakan login ulang.' },
+        {
+          error:
+            `Sesi Admin tidak valid/kedaluwarsa. Silakan login ulang.\n\n` +
+            `[Detail teknis] Server memvalidasi ke project: ${hostDipakai}. ` +
+            `Sumber URL: ${process.env.NEXT_PUBLIC_SUPABASE_URL ? 'env var NEXT_PUBLIC_SUPABASE_URL' : 'fallback bawaan (env var TIDAK terbaca)'}. ` +
+            `Pesan asli dari Supabase: ${errorUser?.message || '(tidak ada pesan, user kosong)'}.`,
+        },
         { status: 401 }
       )
     }

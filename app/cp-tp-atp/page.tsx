@@ -607,7 +607,7 @@ export default function CpTpAtpPage() {
     return { cp, materi, tp, atp, atpPerKelas, namaMapel, namaGuru }
   }
 
-  const handleDownloadPdf = async (mode: 'unduh' | 'preview' = 'unduh') => {
+  const handleDownloadPdf = async (mode: 'unduh' | 'preview' = 'unduh', halaman: 'analisis' | 'atp' = 'analisis') => {
     if (!filterMapelId || !filterFase) { alert('Pilih Mata Pelajaran dan Fase terlebih dahulu untuk download.'); return }
     setDownloadLoading(true)
     try {
@@ -615,23 +615,12 @@ export default function CpTpAtpPage() {
       const autoTableMod: any = await import('jspdf-autotable')
       const autoTable = autoTableMod.default || autoTableMod
 
-      const { cp, tp, atpPerKelas, namaMapel, namaGuru } = siapkanDataCetak()
-
-      // Teks alur (kolom ke-3) — satu blok berlanjut, dipisah per kelas dengan sub-judul,
-      // nomor TIDAK reset di tiap kelas.
-      const atpLines: string[] = []
-      atpPerKelas.forEach(blok => {
-        if (blok.items.length === 0) return
-        atpLines.push(`KELAS ${blok.kelas}`)
-        blok.items.forEach(it => atpLines.push(`${it.nomorGlobal}. ${it.materiNama || it.tpDeskripsi || '-'}`))
-      })
-      const atpFullText = atpLines.length > 0 ? atpLines.join('\n') : '-'
+      const { cp, materi, tp, atpPerKelas, namaMapel, namaGuru } = siapkanDataCetak()
 
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
       const pageWidth = doc.internal.pageSize.getWidth()
       const marginLeft = 20, marginRight = 15
       const contentWidth = pageWidth - marginLeft - marginRight
-      let y = 18
 
       // Nama lembaga yang tercetak WAJIB mengikuti Unit yang dipilih di filter
       // atas -- Lembaga Pusat -> nama lembaga pusat, Unit tertentu -> nama unit itu.
@@ -639,74 +628,128 @@ export default function CpTpAtpPage() {
       const unitAtpTerpilih = filterUnitId ? identitasAtp?.unitList.find(u => u.id === filterUnitId) : undefined
       const namaLembagaCetak = filterUnitId ? (unitAtpTerpilih?.nama || namaSekolah) : (identitasAtp?.namaLembaga || namaSekolah || namaInduk || '')
 
-      doc.setFont('times', 'bold')
-      doc.setFontSize(14)
-      doc.text('ALUR TUJUAN PEMBELAJARAN', pageWidth / 2, y, { align: 'center' })
-      y += 6
-      doc.text(namaLembagaCetak.toUpperCase(), pageWidth / 2, y, { align: 'center' })
-      y += 9
+      // Kop judul + identitas dipakai ulang di KEDUA halaman (Analisis CP & Alur TP)
+      // supaya masing-masing halaman tetap lengkap & bisa berdiri sendiri kalau dicetak
+      // terpisah. Mengembalikan posisi Y setelah kop, siap dipakai startY tabel.
+      const tulisKopHalaman = (judul: string): number => {
+        let yy = 18
+        doc.setFont('times', 'bold'); doc.setFontSize(14)
+        doc.text(judul, pageWidth / 2, yy, { align: 'center' }); yy += 6
+        doc.text(namaLembagaCetak.toUpperCase(), pageWidth / 2, yy, { align: 'center' }); yy += 9
 
-      doc.setFont('times', 'normal')
-      doc.setFontSize(11.5)
-      const halfW = contentWidth / 2
-      const labelW = 38 // lebar label tetap supaya titik dua selalu sejajar dalam 1 kolom
-      const barisInfo = (label: string, value: string, x: number, yy: number) => {
-        doc.text(label, x, yy)
-        doc.text(`: ${value}`, x + labelW, yy)
+        doc.setFont('times', 'normal'); doc.setFontSize(11.5)
+        const halfW = contentWidth / 2
+        const labelW = 38 // lebar label tetap supaya titik dua selalu sejajar dalam 1 kolom
+        const barisInfo = (label: string, value: string, x: number, yPos: number) => {
+          doc.text(label, x, yPos)
+          doc.text(`: ${value}`, x + labelW, yPos)
+        }
+        barisInfo('Fase', `FASE ${filterFase}`, marginLeft, yy)
+        barisInfo('Nama Guru', namaGuru || '-', marginLeft + halfW, yy)
+        yy += 5.5
+        barisInfo('Mata Pelajaran', namaMapel, marginLeft, yy)
+        barisInfo('Tahun Ajaran', tahunAjaran, marginLeft + halfW, yy)
+        yy += 10
+        return yy
       }
-      barisInfo('Fase', `FASE ${filterFase}`, marginLeft, y)
-      barisInfo('Nama Guru', namaGuru || '-', marginLeft + halfW, y)
-      y += 5.5
-      barisInfo('Mata Pelajaran', namaMapel, marginLeft, y)
-      barisInfo('Tahun Ajaran', tahunAjaran, marginLeft + halfW, y)
-      y += 10
 
-      const body: any[] = []
-      if (cp.length === 0) {
-        body.push(['-', '-', atpFullText])
+      // Dua pilihan unduhan TERPISAH (bukan satu file gabungan) -- Admin/Guru memilih
+      // sendiri halaman mana yang mau dicetak/diunduh lewat parameter `halaman`.
+      let judulDokumen = ''
+      if (halaman === 'analisis') {
+        // ═══════════════ ANALISIS CAPAIAN PEMBELAJARAN ═══════════════
+        // Satu baris per Lingkup Materi (bukan per CP) -- Elemen & Capaian Pembelajaran
+        // digabung (rowSpan) menaungi semua Materi miliknya, karena satu CP wajar punya
+        // beberapa Lingkup Materi dengan Tujuan Pembelajaran masing-masing yang berbeda.
+        judulDokumen = 'Analisis Capaian Pembelajaran'
+        const y1 = tulisKopHalaman('ANALISIS CAPAIAN PEMBELAJARAN')
+
+        const bodyCp: any[] = []
+        if (cp.length === 0) {
+          bodyCp.push(['-', '-', '-', '-'])
+        } else {
+          cp.forEach(c => {
+            const materiUntukCp = materi.filter(m => m.cpId === c.id)
+            const daftarBaris = materiUntukCp.length > 0 ? materiUntukCp : [null]
+            daftarBaris.forEach((m, i) => {
+              const tpUntukMateri = m ? tp.filter(t => t.materiId === m.id) : []
+              const tpTeks = tpUntukMateri.length > 0 ? tpUntukMateri.map(t => `•  ${t.deskripsi}`).join('\n') : '-'
+              if (i === 0) {
+                bodyCp.push([
+                  { content: c.elemen || '-', rowSpan: daftarBaris.length, styles: { valign: 'top' } },
+                  { content: c.deskripsi, rowSpan: daftarBaris.length, styles: { valign: 'top' } },
+                  m ? m.nama : '-',
+                  tpTeks,
+                ])
+              } else {
+                bodyCp.push([m ? m.nama : '-', tpTeks])
+              }
+            })
+          })
+        }
+
+        autoTable(doc, {
+          startY: y1,
+          margin: { left: marginLeft, right: marginRight },
+          head: [[
+            { content: 'Elemen', styles: { fontStyle: 'bold', halign: 'center' } },
+            { content: 'Capaian Pembelajaran', styles: { fontStyle: 'bold', halign: 'center' } },
+            { content: 'Lingkup Materi', styles: { fontStyle: 'bold', halign: 'center' } },
+            { content: 'Tujuan Pembelajaran', styles: { fontStyle: 'bold', halign: 'center' } },
+          ]],
+          body: bodyCp,
+          theme: 'grid',
+          styles: { font: 'times', fontSize: 10.5, cellPadding: 3, lineColor: [0, 0, 0], lineWidth: 0.15, valign: 'top' },
+          headStyles: { fillColor: [237, 227, 243], textColor: [30, 10, 40], font: 'times', fontStyle: 'bold' },
+          columnStyles: {
+            0: { cellWidth: contentWidth * 0.14 },
+            1: { cellWidth: contentWidth * 0.30 },
+            2: { cellWidth: contentWidth * 0.20 },
+            3: { cellWidth: contentWidth * 0.36 },
+          },
+        })
       } else {
-        cp.forEach((c, i) => {
-          const leftTeks = (c.elemen ? c.elemen + '\n' : '') + c.deskripsi
-          const tpUntukCp = tp.filter(t => t.cpId === c.id)
-          const middleTeks = tpUntukCp.length > 0 ? tpUntukCp.map(t => `•  ${t.deskripsi}`).join('\n') : '-'
-          if (i === 0) {
-            body.push([
-              leftTeks,
-              middleTeks,
-              { content: atpFullText, rowSpan: cp.length, styles: { valign: 'top' } }
-            ])
-          } else {
-            body.push([leftTeks, middleTeks])
-          }
+        // ═══════════════ ALUR TUJUAN PEMBELAJARAN ═══════════════
+        // Tabel No | Alur Tujuan Pembelajaran (ATP), dikelompokkan per KELAS (baris judul
+        // penuh selebar tabel), nomor urut BERLANJUT lintas kelas (tidak reset).
+        judulDokumen = 'Alur Tujuan Pembelajaran (ATP)'
+        const y2 = tulisKopHalaman('ALUR TUJUAN PEMBELAJARAN')
+
+        const bodyAtp: any[] = []
+        atpPerKelas.forEach(blok => {
+          if (blok.items.length === 0) return
+          bodyAtp.push([{ content: `KELAS ${blok.kelas}`, colSpan: 2, styles: { fontStyle: 'bold', fillColor: [245, 240, 248] } }])
+          blok.items.forEach(it => {
+            bodyAtp.push([String(it.nomorGlobal), it.materiNama || it.tpDeskripsi || '-'])
+          })
+        })
+        if (bodyAtp.length === 0) bodyAtp.push(['-', 'Belum ada data ATP'])
+
+        autoTable(doc, {
+          startY: y2,
+          margin: { left: marginLeft, right: marginRight },
+          head: [[
+            { content: 'No', styles: { fontStyle: 'bold', halign: 'center' } },
+            { content: 'Alur Tujuan Pembelajaran (ATP)', styles: { fontStyle: 'bold', halign: 'center' } },
+          ]],
+          body: bodyAtp,
+          theme: 'grid',
+          styles: { font: 'times', fontSize: 11, cellPadding: 3, lineColor: [0, 0, 0], lineWidth: 0.15, valign: 'top' },
+          headStyles: { fillColor: [237, 227, 243], textColor: [30, 10, 40], font: 'times', fontStyle: 'bold' },
+          columnStyles: {
+            0: { cellWidth: 16, halign: 'center' },
+            1: { cellWidth: contentWidth - 16 },
+          },
         })
       }
-
-      autoTable(doc, {
-        startY: y,
-        margin: { left: marginLeft, right: marginRight },
-        head: [[
-          { content: 'Capaian Pembelajaran Setiap Elemen', styles: { fontStyle: 'bold', halign: 'center' } },
-          { content: 'Tujuan Pembelajaran', styles: { fontStyle: 'bold', halign: 'center' } },
-          { content: 'Alur Tujuan Pembelajaran', styles: { fontStyle: 'bold', halign: 'center' } },
-        ]],
-        body,
-        theme: 'grid',
-        styles: { font: 'times', fontSize: 11, cellPadding: 3, lineColor: [0, 0, 0], lineWidth: 0.15, valign: 'top' },
-        headStyles: { fillColor: [237, 227, 243], textColor: [30, 10, 40], font: 'times', fontStyle: 'bold' },
-        columnStyles: {
-          0: { cellWidth: contentWidth / 3 },
-          1: { cellWidth: contentWidth / 3 },
-          2: { cellWidth: contentWidth / 3 },
-        },
-      })
 
       // ── TANDA TANGAN ──────────────────────────────────────
       // Kepala Sekolah/Mudir ("Mengetahui") SELALU di KIRI (ditentukan dari
       // selector "Lembaga / Unit" di atas), Guru Mapel di KANAN -- titimangsa
       // sejajar kolom KANAN (Guru). Tanpa garis TTD.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const finalYAtp: number = (doc as any).lastAutoTable?.finalY || y
-      let ttdY = finalYAtp + 14
+      const finalYTabel: number = (doc as any).lastAutoTable?.finalY || 40
+      let ttdY = finalYTabel + 14
       if (ttdY + 45 > doc.internal.pageSize.getHeight() - 15) { doc.addPage(); ttdY = 20 }
 
       const namaPenandatanganAtp = filterUnitId ? (unitAtpTerpilih?.namaKepala || '') : (identitasAtp?.namaMudir || '')
@@ -740,15 +783,16 @@ export default function CpTpAtpPage() {
       doc.setFont('times', 'normal'); doc.setFontSize(9.5)
       doc.text(`NUPTK: ${daftarGuru.find(g => g.id === filterGuruId)?.nip || '-'}`, ttdKananTengahAtp, ttdY + 30 + namaGuruLinesAtp.length * 4, { align: 'center' })
 
+      const namaFileDasar = `${judulDokumen} ${namaMapel} Fase ${filterFase}`
       if (mode === 'preview') {
-        const namaFile = `${namaFileAman(`CP TP ATP ${namaMapel} Fase ${filterFase}`)}.pdf`
+        const namaFile = `${namaFileAman(namaFileDasar)}.pdf`
         const fileBernama = new File([doc.output('blob')], namaFile, { type: 'application/pdf' })
         const url = URL.createObjectURL(fileBernama)
         if (previewRef.current) URL.revokeObjectURL(previewRef.current)
         previewRef.current = url
         setPreviewUrl(url)
       } else {
-        doc.save(`${namaFileAman(`CP TP ATP ${namaMapel} Fase ${filterFase}`)}.pdf`)
+        doc.save(`${namaFileAman(namaFileDasar)}.pdf`)
       }
     } catch (e) {
       alert('Gagal membuat PDF: ' + String(e instanceof Error ? e.message : e) +
@@ -975,24 +1019,38 @@ export default function CpTpAtpPage() {
             Nama sekolah yang tercetak mengikuti Unit yang dipilih di atas (Lembaga Pusat → nama lembaga pusat; Unit tertentu → nama unit itu). Nama Guru & Tahun Ajaran ini akan tampil di bawah judul dokumen (sebelum tabel Capaian Umum, CP per Elemen, Materi, TP, dan ATP) saat dicetak.
           </p>
 
-          {/* Cetak / Download — 1 dokumen gabungan */}
+          {/* Cetak / Download — 2 pilihan TERPISAH, masing-masing 1 halaman/dokumen sendiri */}
           {filterMapelId && filterFase ? (
-            <div className="mt-3 flex gap-2 justify-end">
-              <button onClick={() => handleDownloadPdf('preview')} disabled={downloadLoading}
-                className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2 rounded-xl font-bold text-xs shadow transition disabled:opacity-50" title="Pratinjau sebelum unduh">
-                <Eye className="w-3.5 h-3.5" /> Pratinjau
-              </button>
-              <button onClick={() => handleDownloadPdf()} disabled={downloadLoading}
-                className="flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl font-bold text-xs shadow transition disabled:opacity-50">
-                <Download className="w-3.5 h-3.5" /> {downloadLoading ? 'Menyiapkan...' : 'Cetak PDF (Capaian Umum, CP, Materi, TP & ATP)'}
-              </button>
+            <div className="mt-3 flex flex-col gap-2 items-end">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Analisis Capaian Pembelajaran:</span>
+                <button onClick={() => handleDownloadPdf('preview', 'analisis')} disabled={downloadLoading}
+                  className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2 rounded-xl font-bold text-xs shadow transition disabled:opacity-50" title="Pratinjau sebelum unduh">
+                  <Eye className="w-3.5 h-3.5" /> Pratinjau
+                </button>
+                <button onClick={() => handleDownloadPdf('unduh', 'analisis')} disabled={downloadLoading}
+                  className="flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl font-bold text-xs shadow transition disabled:opacity-50">
+                  <Download className="w-3.5 h-3.5" /> {downloadLoading ? 'Menyiapkan...' : 'Unduh PDF'}
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Alur Tujuan Pembelajaran (ATP):</span>
+                <button onClick={() => handleDownloadPdf('preview', 'atp')} disabled={downloadLoading}
+                  className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2 rounded-xl font-bold text-xs shadow transition disabled:opacity-50" title="Pratinjau sebelum unduh">
+                  <Eye className="w-3.5 h-3.5" /> Pratinjau
+                </button>
+                <button onClick={() => handleDownloadPdf('unduh', 'atp')} disabled={downloadLoading}
+                  className="flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl font-bold text-xs shadow transition disabled:opacity-50">
+                  <Download className="w-3.5 h-3.5" /> {downloadLoading ? 'Menyiapkan...' : 'Unduh PDF'}
+                </button>
+              </div>
               <button onClick={handleDownloadExcel} disabled={downloadLoading}
                 className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold text-xs shadow transition disabled:opacity-50">
                 <FileSpreadsheet className="w-3.5 h-3.5" /> Export Excel
               </button>
             </div>
           ) : (
-            <p className="mt-3 text-right text-[10px] text-slate-400">Pilih Mata Pelajaran dan Fase untuk mengaktifkan cetak dokumen gabungan.</p>
+            <p className="mt-3 text-right text-[10px] text-slate-400">Pilih Mata Pelajaran dan Fase untuk mengaktifkan cetak dokumen.</p>
           )}
         </section>
 
