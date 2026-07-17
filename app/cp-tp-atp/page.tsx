@@ -658,13 +658,14 @@ export default function CpTpAtpPage() {
       let judulDokumen = ''
       if (halaman === 'analisis') {
         // ═══════════════ ANALISIS CAPAIAN PEMBELAJARAN ═══════════════
-        // Elemen & Capaian Pembelajaran ditulis SEKALI di baris Materi PERTAMA tiap CP
-        // (bukan baris header terpisah -- itu bikin blok Lingkup Materi/Tujuan
-        // Pembelajaran-nya selalu kosong-melompong, terlihat seperti data yang hilang).
-        // Baris Materi berikutnya kolom Elemen/CP-nya dikosongkan langsung di data (BUKAN
-        // rowSpan bawaan jspdf-autotable -- itu yang bikin garis & isi sel hilang kalau
-        // sel gabungan kepotong ke halaman lain) supaya terlihat menyatu lewat willDrawCell
-        // di bawah, TANPA ada baris yang isinya cuma kosong.
+        // Elemen diulang di SETIAP baris Materi (teksnya pendek, cuma 1-3 kata, jadi aman
+        // diulang tanpa memboroskan ruang atau mengganggu perhitungan tinggi baris) --
+        // supaya baris mana pun tetap ada konteks "ini bagian dari Elemen apa", termasuk
+        // kalau baris itu kebetulan mulai di halaman baru. Capaian Pembelajaran (paragraf
+        // panjang) tetap ditulis SEKALI saja di baris Materi PERTAMA tiap CP, baris
+        // berikutnya dikosongkan langsung di data (BUKAN rowSpan bawaan jspdf-autotable --
+        // itu yang bikin garis & isi sel hilang kalau sel gabungan kepotong ke halaman
+        // lain) supaya terlihat menyatu lewat willDrawCell di bawah.
         judulDokumen = 'Analisis Capaian Pembelajaran'
         const y1 = tulisKopHalaman('ANALISIS CAPAIAN PEMBELAJARAN')
 
@@ -679,7 +680,7 @@ export default function CpTpAtpPage() {
               const tpUntukMateri = m ? tp.filter(t => t.materiId === m.id) : []
               const tpTeks = tpUntukMateri.length > 0 ? tpUntukMateri.map(t => `•  ${t.deskripsi}`).join('\n') : '-'
               bodyCp.push([
-                i === 0 ? (c.elemen || '-') : '',
+                c.elemen || '-',
                 i === 0 ? c.deskripsi : '',
                 m ? m.nama : '-',
                 tpTeks,
@@ -798,7 +799,9 @@ export default function CpTpAtpPage() {
           headStyles: headStylesAnalisis,
           columnStyles: columnStylesAnalisis,
           willDrawCell: (data: any) => {
-            if (data.section !== 'body' || data.column.index > 1) return
+            // Hanya kolom Capaian Pembelajaran (1) yang digabung -- Elemen (0) sekarang
+            // selalu terisi di tiap baris (lihat komentar di atas), tidak perlu digabung.
+            if (data.section !== 'body' || data.column.index !== 1) return
             const kolom = data.column.index
             const i = data.row.index
             if (i < 0) return // baris sendiri kepotong ke halaman lain -- biarkan garis normal, aman
