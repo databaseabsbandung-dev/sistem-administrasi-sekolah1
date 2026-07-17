@@ -658,43 +658,45 @@ export default function CpTpAtpPage() {
       let judulDokumen = ''
       if (halaman === 'analisis') {
         // ═══════════════ ANALISIS CAPAIAN PEMBELAJARAN ═══════════════
-        // Elemen & Capaian Pembelajaran ditulis SEKALI di baris Materi PERTAMA tiap CP,
-        // baris berikutnya dikosongkan langsung di data (BUKAN rowSpan bawaan
-        // jspdf-autotable -- itu yang bikin garis & isi sel hilang kalau sel gabungan
-        // kepotong ke halaman lain) supaya terlihat menyatu lewat willDrawCell di bawah.
         judulDokumen = 'Analisis Capaian Pembelajaran'
         const y1 = tulisKopHalaman('ANALISIS CAPAIAN PEMBELAJARAN')
 
-        const bodyCp: any[] = []
-        if (cp.length === 0) {
-          bodyCp.push(['-', '-', '-', '-'])
-        } else {
-          cp.forEach(c => {
-            const materiUntukCp = materi.filter(m => m.cpId === c.id)
-            const daftarBaris = materiUntukCp.length > 0 ? materiUntukCp : [null]
-            daftarBaris.forEach((m, i) => {
+        // 1) Kumpulkan dulu data MENTAH per grup CP (Elemen, deskripsi CP, daftar Materi+TP
+        // di bawahnya). Baris tabel yang sesungguhnya baru dibentuk di langkah (3) di bawah,
+        // SETELAH lebar kolom & tinggi alami tiap baris Materi diketahui -- supaya paragraf
+        // Capaian Pembelajaran yang panjang bisa DIALIRKAN terbagi ke SEMUA baris Materi
+        // dalam grupnya (proporsional dengan tinggi masing-masing), bukan ditumpuk semuanya
+        // ke SATU baris saja (itu penyebab satu baris jadi jauh lebih tinggi dari yang lain,
+        // menyisakan banyak ruang kosong di kolom Lingkup Materi/Tujuan Pembelajarannya).
+        type BarisMateriMentah = { materiNama: string; tpTeks: string }
+        type GrupCpMentah = { elemen: string; cpDeskripsi: string; barisMateri: BarisMateriMentah[] }
+        const grupCp: GrupCpMentah[] = cp.map(c => {
+          const materiUntukCp = materi.filter(m => m.cpId === c.id)
+          const daftarBaris = materiUntukCp.length > 0 ? materiUntukCp : [null]
+          return {
+            elemen: c.elemen || '-',
+            cpDeskripsi: c.deskripsi,
+            barisMateri: daftarBaris.map(m => {
               const tpUntukMateri = m ? tp.filter(t => t.materiId === m.id) : []
               const tpTeks = tpUntukMateri.length > 0 ? tpUntukMateri.map(t => `•  ${t.deskripsi}`).join('\n') : '-'
-              bodyCp.push([
-                i === 0 ? (c.elemen || '-') : '',
-                i === 0 ? c.deskripsi : '',
-                m ? m.nama : '-',
-                tpTeks,
-              ])
-            })
-          })
-        }
+              return { materiNama: m ? m.nama : '-', tpTeks }
+            }),
+          }
+        })
 
-        // Lebar tiap kolom MENYESUAIKAN banyak teksnya sendiri (bukan persentase tetap) --
-        // dihitung dari total panjang karakter semua isi kolom itu di dataset yang sedang
-        // dicetak. Karena Elemen/Capaian Pembelajaran kini HANYA muncul sekali per CP (di
-        // baris Materi pertama, bukan diulang di tiap baris Materi), penjumlahan panjang
-        // teksnya sudah otomatis mencerminkan kebutuhan ruang yang sebenarnya. Dibatasi
-        // rentang wajar per kolom supaya kolom pendek tidak kosong melompong & kolom
-        // panjang tidak kebagian sempit.
+        // 2) Lebar tiap kolom MENYESUAIKAN banyak teksnya sendiri (bukan persentase tetap) --
+        // dihitung dari total panjang karakter semua isi kolom, pakai representasi flat
+        // sementara (Capaian Pembelajaran cuma dihitung sekali per grup di sini, sebelum
+        // dialirkan ke langkah 3). Dibatasi rentang wajar per kolom supaya kolom pendek
+        // tidak kosong melompong & kolom panjang tidak kebagian sempit.
+        const bodyUntukLebar: string[][] = grupCp.length === 0
+          ? [['-', '-', '-', '-']]
+          : grupCp.flatMap(g => g.barisMateri.map((b, i) => [
+              i === 0 ? g.elemen : '', i === 0 ? g.cpDeskripsi : '', b.materiNama, b.tpTeks,
+            ]))
         const hitungLebarKolom = (): number[] => {
           const totalPanjang = [0, 1, 2, 3].map(kolom =>
-            bodyCp.reduce((jumlah, baris) => jumlah + String(baris[kolom] ?? '').length, 0)
+            bodyUntukLebar.reduce((jumlah, baris) => jumlah + String(baris[kolom] ?? '').length, 0)
           )
           const jumlahSemua = totalPanjang.reduce((a, b) => a + b, 0) || 1
           const rentang = [
@@ -712,12 +714,11 @@ export default function CpTpAtpPage() {
           // dalamnya sendiri -- diukur pakai jsPDF sungguhan (bukan cuma tebak-tebakan
           // dari jumlah karakter). Tanpa ini, lebar hasil persentase di atas bisa saja
           // lebih sempit dari satu kata utuh (mis. "Pertidaksamaan"), membuat kata itu
-          // terpotong huruf-per-huruf ke bawah (mis. "Persamaa/n") -- persis bug yang
-          // dilaporkan lewat screenshot.
+          // terpotong huruf-per-huruf ke bawah (mis. "Persamaa/n").
           doc.setFont('times', 'normal'); doc.setFontSize(10.5)
           const lebarKataTerpanjang = [0, 1, 2, 3].map(kolom => {
             let maks = 0
-            bodyCp.forEach(baris => {
+            bodyUntukLebar.forEach(baris => {
               String(baris[kolom] ?? '').split(/\s+/).forEach(kata => {
                 const w = doc.getTextWidth(kata)
                 if (w > maks) maks = w
@@ -743,6 +744,75 @@ export default function CpTpAtpPage() {
           return lebar
         }
         const [lebarElemen, lebarCp, lebarMateri, lebarTp] = hitungLebarKolom()
+
+        // 3) Bangun body SUNGGUHAN -- Capaian Pembelajaran DIALIRKAN ke seluruh baris Materi
+        // dalam grupnya, proporsional dengan tinggi ALAMI tiap baris (dari Materi/TP-nya
+        // sendiri). Tinggi dihitung pakai rumus tinggi baris SUNGGUHAN milik jspdf-autotable
+        // (jumlah baris hasil bungkus teks × tinggi baris font + padding vertikal) supaya
+        // akurat. Baris Materi TERAKHIR dalam grup selalu mengambil SISA teks CP yang belum
+        // terbagi, supaya tidak ada satu kata pun dari Capaian Pembelajaran yang hilang
+        // akibat pembulatan pembagian proporsinya.
+        doc.setFont('times', 'normal'); doc.setFontSize(10.5)
+        const scaleFactor = doc.internal.scaleFactor
+        const lineHeightFactor = typeof doc.getLineHeightFactor === 'function' ? doc.getLineHeightFactor() : 1.15
+        const tinggiPerBarisTeks = (10.5 / scaleFactor) * lineHeightFactor
+        const bungkusTeks = (teks: string, lebarKolom: number): string[] => doc.splitTextToSize(String(teks ?? ''), Math.max(1, lebarKolom - 6))
+        const tinggiDariJumlahBaris = (n: number): number => n * tinggiPerBarisTeks + 6
+
+        const bodyCp: any[] = []
+        // Per baris di bodyCp: apakah ini baris AWAL/AKHIR grup CP-nya (Elemen & Capaian
+        // Pembelajaran selalu mengisi rentang baris yang SAMA PERSIS -- satu grup Materi).
+        const infoGrup: { awal: boolean; akhir: boolean }[] = []
+
+        if (grupCp.length === 0) {
+          bodyCp.push(['-', '-', '-', '-'])
+          infoGrup.push({ awal: true, akhir: true })
+        } else {
+          grupCp.forEach(g => {
+            const jumlahBaris = g.barisMateri.length
+            const tinggiAlami = g.barisMateri.map(b =>
+              Math.max(tinggiDariJumlahBaris(bungkusTeks(b.materiNama, lebarMateri).length), tinggiDariJumlahBaris(bungkusTeks(b.tpTeks, lebarTp).length))
+            )
+            const barisTeksCp = bungkusTeks(g.cpDeskripsi, lebarCp)
+
+            // Kapasitas baris ke-k = berapa baris teks CP yang MASIH MUAT tanpa
+            // membuat baris itu lebih tinggi dari kebutuhan Materi/TP-nya SENDIRI --
+            // dihitung dari tinggi alami baris itu (bukan persentase/proporsi dari
+            // total grup). Dengan ini tinggi kotak Lingkup Materi & Tujuan
+            // Pembelajaran MURNI mengikuti isinya sendiri, tidak pernah ditarik naik
+            // oleh Capaian Pembelajaran.
+            const kapasitasBaris = tinggiAlami.map(tinggi => Math.max(1, Math.floor((tinggi - 6) / tinggiPerBarisTeks)))
+
+            let idxCp = 0
+            const potonganCp: string[][] = tinggiAlami.map((_, k) => {
+              if (k === jumlahBaris - 1) {
+                // Baris TERAKHIR grup menampung SISA teks CP apa adanya (jaminan
+                // tidak ada teks yang hilang). Tinggi kotak Capaian Pembelajaran
+                // (gabungan seluruh baris grup) otomatis mengikuti tinggi gabungan
+                // Materi+TP yang sudah menyesuaikan isinya sendiri -- kalau CP masih
+                // tersisa banyak di titik ini, hanya baris terakhir ini yang ikut
+                // sedikit lebih tinggi, bukan seluruh baris di grup.
+                const potongan = barisTeksCp.slice(idxCp)
+                idxCp = barisTeksCp.length
+                return potongan
+              }
+              const jumlah = Math.min(barisTeksCp.length - idxCp, kapasitasBaris[k])
+              const potongan = barisTeksCp.slice(idxCp, idxCp + jumlah)
+              idxCp += jumlah
+              return potongan
+            })
+
+            g.barisMateri.forEach((b, k) => {
+              bodyCp.push([
+                k === 0 ? g.elemen : '',
+                potonganCp[k].join('\n'),
+                b.materiNama,
+                b.tpTeks,
+              ])
+              infoGrup.push({ awal: k === 0, akhir: k === jumlahBaris - 1 })
+            })
+          })
+        }
 
         const headAnalisis = [[
           { content: 'Elemen', styles: { fontStyle: 'bold' as const, halign: 'center' as const } },
@@ -773,7 +843,15 @@ export default function CpTpAtpPage() {
         // padahal seharusnya tetap ada (persis bug yang dilaporkan). Dengan tahu halaman
         // pasti dari percobaan render ini, TAHAP 2 di bawah baru menggambar garis yang
         // benar-benar akurat.
+        // halamanBaris[i]     = halaman TEMPAT AWAL baris ke-i mulai digambar.
+        // halamanAkhirBaris[i]= halaman TEMPAT baris ke-i BENAR-BENAR selesai digambar --
+        // beda dengan halamanBaris[i] kalau baris itu sendiri terpaksa terpotong dua
+        // halaman (spansMultiplePages). "Potongan sisa" dari baris yang terpotong itu
+        // punya row.index === -1 pada jspdf-autotable, jadi harus "dititipkan" balik ke
+        // indeks baris asli terakhir yang benar-benar terlihat (indeksTerakhirDilihat).
         const halamanBaris: number[] = []
+        const halamanAkhirBaris: number[] = []
+        let indeksTerakhirDilihat = -1
         const docUjiCoba = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
         autoTable(docUjiCoba, {
           startY: y1,
@@ -785,12 +863,20 @@ export default function CpTpAtpPage() {
           headStyles: headStylesAnalisis,
           columnStyles: columnStylesAnalisis,
           didDrawCell: (data: any) => {
-            if (data.section === 'body' && data.row.index >= 0) halamanBaris[data.row.index] = data.pageNumber
+            if (data.section !== 'body') return
+            if (data.row.index >= 0) {
+              halamanBaris[data.row.index] = data.pageNumber
+              halamanAkhirBaris[data.row.index] = data.pageNumber
+              indeksTerakhirDilihat = data.row.index
+            } else if (indeksTerakhirDilihat >= 0) {
+              halamanAkhirBaris[indeksTerakhirDilihat] = data.pageNumber
+            }
           },
         })
 
         // ── TAHAP 2: render SUNGGUHAN, dengan garis atas/bawah sel gabungan yang sudah
-        // pasti akurat karena sudah tahu persis baris mana ada di halaman mana.
+        // pasti akurat karena sudah tahu persis baris mana ada di halaman mana -- termasuk
+        // baris yang isinya sendiri terpotong dua halaman.
         autoTable(doc, {
           startY: y1,
           margin: { left: marginLeft, right: marginRight },
@@ -801,19 +887,23 @@ export default function CpTpAtpPage() {
           headStyles: headStylesAnalisis,
           columnStyles: columnStylesAnalisis,
           willDrawCell: (data: any) => {
-            // Kolom Elemen (0) & Capaian Pembelajaran (1) sama-sama digabung.
+            // Kolom Elemen (0) & Capaian Pembelajaran (1) sama-sama digabung per grup CP --
+            // sekarang teks CP-nya sendiri MENGALIR beda per baris (bukan cuma baris
+            // pertama yang isi, sisanya kosong), jadi keputusan gabung/tidak TIDAK BISA lagi
+            // memakai cek "teks kosong" -- harus memakai batas grup (infoGrup) secara
+            // eksplisit, dan baris yang sendiri terpotong halaman WAJIB tetap bergaris
+            // penuh di titik potongnya supaya tidak ada garis yang "hilang".
             if (data.section !== 'body' || data.column.index > 1) return
-            const kolom = data.column.index
             const i = data.row.index
-            if (i < 0) return // baris sendiri kepotong ke halaman lain -- biarkan garis normal, aman
-            const barisIni = bodyCp[i]
-            const barisBerikutnya = bodyCp[i + 1]
-            // Garis ATAS & BAWAH cuma disembunyikan kalau baris tetangganya (sebelum/
-            // sesudah) benar-benar ada di HALAMAN YANG SAMA (bukan cuma sama datanya) --
-            // itu inti perbaikannya, supaya garis di ujung halaman tidak pernah hilang.
-            const bukanAwal = barisIni[kolom] === '' && i > 0 && halamanBaris[i - 1] === halamanBaris[i]
-            const bukanAkhir = !!barisBerikutnya && barisBerikutnya[kolom] === '' &&
-              halamanBaris[i + 1] === halamanBaris[i]
+            if (i < 0) return // potongan sisa baris yang terpotong -- biarkan garis normal, aman
+            if (data.row.spansMultiplePages) {
+              data.cell.styles.lineWidth = { top: 0.15, bottom: 0.15, left: 0.15, right: 0.15 }
+              return
+            }
+            const info = infoGrup[i]
+            const barisBerikutnyaAda = (i + 1) < bodyCp.length
+            const bukanAwal = !info.awal && i > 0 && halamanAkhirBaris[i - 1] === halamanBaris[i]
+            const bukanAkhir = !info.akhir && barisBerikutnyaAda && halamanAkhirBaris[i] === halamanBaris[i + 1]
             data.cell.styles.lineWidth = {
               top: bukanAwal ? 0 : 0.15,
               bottom: bukanAkhir ? 0 : 0.15,
