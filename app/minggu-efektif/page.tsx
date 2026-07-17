@@ -820,6 +820,20 @@ export default function MingguEfektifPage() {
     [daftarLembagaUnit]
   )
 
+  // Unit-unit tempat Guru yang sedang login ditugaskan (bisa lebih dari satu, mis. guru
+  // yang mengajar di SMP DAN SMA) -- dipakai supaya "Cakupan Perhitungan Minggu Efektif
+  // Lembaga" TERKUNCI sesuai unit guru itu sendiri (bukan bebas memilih Lembaga Pusat atau
+  // unit lain yang bukan tempatnya mengajar), dan dropdown Unit HANYA muncul kalau guru
+  // itu memang ditugaskan di lebih dari satu unit.
+  const unitIdsGuruSendiri = useMemo(() => {
+    if (!cakupanGuru?.guruId) return []
+    return daftarGuru.find(g => g.id === cakupanGuru.guruId)?.unitIds || []
+  }, [cakupanGuru, daftarGuru])
+  const daftarUnitScopeGuru = useMemo(
+    () => daftarUnitScope.filter(u => unitIdsGuruSendiri.includes(u.id)),
+    [daftarUnitScope, unitIdsGuruSendiri]
+  )
+
   // Cari unit (lembagaId) tempat sebuah rombel berada, lewat tingkatId -> master_tingkat.lembagaId
   const resolveUnitIdRombel = (rombel: any): string => {
     if (!rombel) return ''
@@ -899,15 +913,27 @@ export default function MingguEfektifPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterGuruId, daftarMapelSesuaiCakupan])
 
-  // Auto-pilih unit/kelas pertama begitu datanya tersedia, supaya selector tidak kosong
+  // Akun Guru dikunci ke cakupan "Unit" (bukan "Lembaga (Pusat)" yang menggabungkan
+  // SEMUA unit, termasuk unit lain yang bukan tempatnya mengajar) -- kalau ternyata
+  // sedang di "pusat" (mis. nilai awal default sebelum cakupanGuru diketahui), paksa
+  // pindah ke "unit" begitu terdeteksi akun ini adalah Guru.
   useEffect(() => {
-    if (scopeLevel === 'unit' && !scopeUnitId && daftarUnitScope.length > 0) {
-      setScopeUnitId(daftarUnitScope[0].id)
+    if (cakupanGuru && scopeLevel === 'pusat') setScopeLevel('unit')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cakupanGuru])
+
+  // Auto-pilih unit/kelas pertama begitu datanya tersedia, supaya selector tidak kosong.
+  // Untuk akun Guru, unit yang dipilihkan otomatis HARUS dari unit-unit miliknya sendiri
+  // (daftarUnitScopeGuru), bukan sembarang unit pertama di seluruh lembaga.
+  useEffect(() => {
+    const sumberUnit = cakupanGuru ? daftarUnitScopeGuru : daftarUnitScope
+    if (scopeLevel === 'unit' && sumberUnit.length > 0 && !sumberUnit.some(u => u.id === scopeUnitId)) {
+      setScopeUnitId(sumberUnit[0].id)
     }
     if (scopeLevel === 'kelas' && !scopeRombelId && daftarRombel.length > 0) {
       setScopeRombelId(daftarRombel[0].id)
     }
-  }, [scopeLevel, daftarUnitScope, daftarRombel, scopeUnitId, scopeRombelId])
+  }, [scopeLevel, daftarUnitScope, daftarUnitScopeGuru, cakupanGuru, daftarRombel, scopeUnitId, scopeRombelId])
 
   // --------------------------------------------------------------
   // AGENDA KALDIK SESUAI CAKUPAN LEMBAGA (pusat/unit/kelas) YANG DIPILIH
@@ -1371,11 +1397,20 @@ export default function MingguEfektifPage() {
           </div>
           <div className="flex flex-wrap gap-3 items-end">
             <div className="flex bg-slate-100 rounded-xl p-1">
-              {([
-                { v: 'pusat', label: '🏛️ Lembaga (Pusat)' },
-                { v: 'unit', label: '🏫 Unit' },
-                { v: 'kelas', label: '🎓 Kelas / Rombel' },
-              ] as { v: ScopeLevel; label: string }[]).map(opt => (
+              {(cakupanGuru
+                // Akun Guru dikunci sesuai perannya -- "Lembaga (Pusat)" (gabungan SEMUA
+                // unit, termasuk unit lain yang bukan tempatnya mengajar) sengaja tidak
+                // ditawarkan sama sekali untuk akun Guru.
+                ? ([
+                    { v: 'unit', label: '🏫 Unit' },
+                    { v: 'kelas', label: '🎓 Kelas / Rombel' },
+                  ] as { v: ScopeLevel; label: string }[])
+                : ([
+                    { v: 'pusat', label: '🏛️ Lembaga (Pusat)' },
+                    { v: 'unit', label: '🏫 Unit' },
+                    { v: 'kelas', label: '🎓 Kelas / Rombel' },
+                  ] as { v: ScopeLevel; label: string }[])
+              ).map(opt => (
                 <button key={opt.v} onClick={() => setScopeLevel(opt.v)}
                   className={`px-4 py-2 text-xs font-bold rounded-lg transition ${scopeLevel === opt.v ? 'bg-[#6A197D] text-white shadow' : 'text-slate-600 hover:bg-white'}`}>
                   {opt.label}
@@ -1386,10 +1421,26 @@ export default function MingguEfektifPage() {
             {scopeLevel === 'unit' && (
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Pilih Unit</label>
-                <select value={scopeUnitId} onChange={e => setScopeUnitId(e.target.value)}
-                  className="px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#6A197D] bg-white min-w-[200px]">
-                  {daftarUnitScope.map(u => <option key={u.id} value={u.id}>{u.label}</option>)}
-                </select>
+                {cakupanGuru ? (
+                  unitIdsGuruSendiri.length > 1 ? (
+                    // Guru yang mengajar di LEBIH dari satu unit -- dropdown SUNGGUHAN,
+                    // tapi dibatasi hanya ke unit-unit miliknya sendiri (daftarUnitScopeGuru).
+                    <select value={scopeUnitId} onChange={e => setScopeUnitId(e.target.value)}
+                      className="px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#6A197D] bg-white min-w-[200px]">
+                      {daftarUnitScopeGuru.map(u => <option key={u.id} value={u.id}>{u.label}</option>)}
+                    </select>
+                  ) : (
+                    // Guru dengan SATU unit saja -- terkunci, tidak perlu dropdown.
+                    <div className="px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-bold bg-slate-50 text-slate-600 min-w-[200px]">
+                      {daftarUnitScope.find(u => u.id === scopeUnitId)?.label || '-'} <span className="text-[9px] font-normal text-slate-400">(unit Anda)</span>
+                    </div>
+                  )
+                ) : (
+                  <select value={scopeUnitId} onChange={e => setScopeUnitId(e.target.value)}
+                    className="px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#6A197D] bg-white min-w-[200px]">
+                    {daftarUnitScope.map(u => <option key={u.id} value={u.id}>{u.label}</option>)}
+                  </select>
+                )}
               </div>
             )}
 
