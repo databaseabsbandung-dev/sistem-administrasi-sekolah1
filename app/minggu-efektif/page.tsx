@@ -190,6 +190,22 @@ function filterAgendaByScope(
 // beda walau SEBAGIAN hari kebetulan sama (mis. 2A Senin+Kamis vs 2B Senin+Rabu -- sama-sama
 // Senin tapi pertemuan ke-2 beda hari, jadi TIDAK digabung). Hasil selalu memuat rombel
 // terpilih sendiri, terurut alfabetis.
+// Ambil ANGKA/ROMAWI kelas dari nama rombel (mis. "6-1" -> "6", "5-2" -> "5", "VII B" ->
+// "VII") -- dipakai cariRombelSejadwal untuk memastikan penggabungan kelas HANYA terjadi
+// antar kelas dengan TINGKAT/ANGKA KELAS YANG BENAR-BENAR SAMA. Tidak bisa mengandalkan
+// tingkatId semata: granularitas Tingkat diatur bebas oleh Admin (lihat placeholder-nya,
+// "Contoh: Kelas 7 atau Fase D") -- satu Tingkat "Fase C" misalnya bisa saja mencakup
+// kelas 5 DAN 6 sekaligus, jadi dua kelas beda angka bisa kebetulan sama tingkatId-nya.
+function angkaKelasDariNamaRombel(nama: string): string {
+  if (!nama) return ''
+  const bersih = String(nama).trim().toUpperCase()
+  const angka = bersih.match(/^(\d{1,2})/)
+  if (angka) return angka[1]
+  const romawi = bersih.match(/^(XII|XI|X|IX|VIII|VII|VI|V|IV|III|II|I)\b/)
+  if (romawi) return romawi[1]
+  return ''
+}
+
 function cariRombelSejadwal(
   guruId: string,
   mapelId: string,
@@ -210,7 +226,16 @@ function cariRombelSejadwal(
   const hariRombelIni = hariSet(rombelId)
   if (hariRombelIni.size === 0) return [rombel]
 
-  const kandidat = rombel.tingkatId ? daftarRombel.filter((r: any) => r.tingkatId === rombel.tingkatId) : [rombel]
+  // Kandidat penggabungan HARUS kelas dengan angka/tingkat yang SAMA PERSIS (mis. "6-1"
+  // dan "6-2" sama-sama "kelas 6" -> boleh digabung; "5-1" dan "6-1" beda angka kelas ->
+  // TIDAK BOLEH digabung meski kebetulan jadwal mengajarnya di hari yang sama). Diprioritaskan
+  // dari angka/romawi di awal NAMA rombel-nya sendiri -- kalau namanya tidak mengikuti pola
+  // yang dikenali (jadi tidak bisa dipastikan sama/beda kelas), turun ke tingkatId sebagai
+  // cadangan supaya perilaku lama tetap jalan untuk data yang penamaannya tidak baku.
+  const kelasRombelIni = angkaKelasDariNamaRombel(rombel.nama)
+  const kandidat = kelasRombelIni
+    ? daftarRombel.filter((r: any) => angkaKelasDariNamaRombel(r.nama) === kelasRombelIni)
+    : (rombel.tingkatId ? daftarRombel.filter((r: any) => r.tingkatId === rombel.tingkatId) : [rombel])
   const gabungan = kandidat.filter((r: any) => r.id === rombelId || hariSama(hariSet(r.id), hariRombelIni))
   gabungan.sort((a: any, b: any) => (a.nama || '').localeCompare(b.nama || ''))
   return gabungan
