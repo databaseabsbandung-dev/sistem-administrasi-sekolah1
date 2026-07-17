@@ -984,12 +984,31 @@ export default function CpTpAtpPage() {
             if (barisUntukSelIni.length === 0) return
             doc.setFont('times', 'normal'); doc.setFontSize(10.5); doc.setTextColor(0, 0, 0)
             const xTeks = data.cell.x + 3
+            // Lebar maksimum teks dipatok dari LEBAR SEL SUNGGUHAN saat digambar
+            // (data.cell.width, bukan variabel lebarCp yang dihitung di awal) -- jaga-jaga
+            // supaya kalaupun ada selisih pembulatan dari jspdf-autotable sendiri, teks
+            // tidak pernah digambar melebihi batas kanan kolom (dioper eksplisit ke
+            // doc.text sebagai maxWidth di setiap baris di bawah).
+            const lebarTeksMaks = data.cell.width - 6
             // Koreksi posisi baris pertama teks (ascent) SAMA seperti yang dipakai
             // jspdf-autotable sendiri (autoTableText: y += fontSize * (2 - 1.15)),
             // supaya konsisten visual dengan kolom lain yang masih dirender bawaan.
             const fontSizeMm = 10.5 / scaleFactor
-            const yMulai = alurGambarCp.topY + 3 + mulaiDari * tinggiPerBarisTeks + fontSizeMm * (2 - 1.15)
-            doc.text(barisUntukSelIni, xTeks, yMulai)
+            barisUntukSelIni.forEach((baris, idx) => {
+              const indeksGlobal = mulaiDari + idx
+              const yBaris = alurGambarCp!.topY + 3 + indeksGlobal * tinggiPerBarisTeks + fontSizeMm * (2 - 1.15)
+              // Rata kanan-kiri (justify) untuk SEMUA baris KECUALI baris paling akhir
+              // dari keseluruhan paragraf CP -- kaidah tipografi baku, baris penutup
+              // paragraf tetap rata kiri apa adanya (supaya tidak "meregang" aneh kalau
+              // sisa katanya cuma sedikit). maxWidth dipatok eksplisit di kedua kondisi
+              // supaya teks TIDAK PERNAH keluar dari batas kolom.
+              const barisTerakhirParagraf = indeksGlobal === semuaBarisCp.length - 1
+              if (barisTerakhirParagraf) {
+                doc.text(baris, xTeks, yBaris, { maxWidth: lebarTeksMaks })
+              } else {
+                doc.text(baris, xTeks, yBaris, { align: 'justify', maxWidth: lebarTeksMaks })
+              }
+            })
           },
         })
       } else {
