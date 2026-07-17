@@ -690,11 +690,11 @@ export default function CpTpAtpPage() {
 
         // Lebar tiap kolom MENYESUAIKAN banyak teksnya sendiri (bukan persentase tetap) --
         // dihitung dari total panjang karakter semua isi kolom itu di dataset yang sedang
-        // dicetak. Karena Elemen/Capaian Pembelajaran kini HANYA muncul sekali per CP
-        // (baris header di atas, bukan diulang di tiap baris Materi lagi), penjumlahan
-        // panjang teksnya sudah otomatis mencerminkan kebutuhan ruang yang sebenarnya.
-        // Dibatasi rentang wajar per kolom supaya kolom pendek tidak kosong melompong &
-        // kolom panjang tidak kebagian sempit.
+        // dicetak. Karena Elemen/Capaian Pembelajaran kini HANYA muncul sekali per CP (di
+        // baris Materi pertama, bukan diulang di tiap baris Materi), penjumlahan panjang
+        // teksnya sudah otomatis mencerminkan kebutuhan ruang yang sebenarnya. Dibatasi
+        // rentang wajar per kolom supaya kolom pendek tidak kosong melompong & kolom
+        // panjang tidak kebagian sempit.
         const hitungLebarKolom = (): number[] => {
           const totalPanjang = [0, 1, 2, 3].map(kolom =>
             bodyCp.reduce((jumlah, baris) => jumlah + String(baris[kolom] ?? '').length, 0)
@@ -703,13 +703,47 @@ export default function CpTpAtpPage() {
           const rentang = [
             { min: 0.08, max: 0.15 }, // Elemen
             { min: 0.15, max: 0.32 }, // Capaian Pembelajaran
-            { min: 0.08, max: 0.20 }, // Lingkup Materi
+            { min: 0.10, max: 0.22 }, // Lingkup Materi
             { min: 0.30, max: 0.55 }, // Tujuan Pembelajaran
           ]
           let proporsi = totalPanjang.map((p, i) => Math.min(rentang[i].max, Math.max(rentang[i].min, p / jumlahSemua)))
           const jumlahProporsi = proporsi.reduce((a, b) => a + b, 0)
           proporsi = proporsi.map(p => p / jumlahProporsi) // normalisasi ulang supaya totalnya tetap 100%
-          return proporsi.map(p => contentWidth * p)
+          let lebar = proporsi.map(p => contentWidth * p)
+
+          // JAMINAN KERAS: kolom tidak boleh lebih sempit dari KATA TERPANJANG di
+          // dalamnya sendiri -- diukur pakai jsPDF sungguhan (bukan cuma tebak-tebakan
+          // dari jumlah karakter). Tanpa ini, lebar hasil persentase di atas bisa saja
+          // lebih sempit dari satu kata utuh (mis. "Pertidaksamaan"), membuat kata itu
+          // terpotong huruf-per-huruf ke bawah (mis. "Persamaa/n") -- persis bug yang
+          // dilaporkan lewat screenshot.
+          doc.setFont('times', 'normal'); doc.setFontSize(10.5)
+          const lebarKataTerpanjang = [0, 1, 2, 3].map(kolom => {
+            let maks = 0
+            bodyCp.forEach(baris => {
+              String(baris[kolom] ?? '').split(/\s+/).forEach(kata => {
+                const w = doc.getTextWidth(kata)
+                if (w > maks) maks = w
+              })
+            })
+            return maks + 6 // + cellPadding kiri-kanan (3mm tiap sisi)
+          })
+          lebar = lebar.map((l, i) => Math.max(l, lebarKataTerpanjang[i]))
+
+          // Kalau ada kolom yang "dipaksa" naik oleh jaminan di atas sampai totalnya
+          // melebihi lebar halaman, kurangi proporsional dari kolom-kolom yang MASIH
+          // punya ruang lebih (di atas jaminan kata-terpanjangnya sendiri) -- supaya
+          // total tetap pas selebar halaman tanpa mengorbankan jaminan anti-terpotong.
+          const totalSekarang = lebar.reduce((a, b) => a + b, 0)
+          if (totalSekarang > contentWidth) {
+            const kelebihan = totalSekarang - contentWidth
+            const bisaDikurangi = lebar.map((l, i) => Math.max(0, l - lebarKataTerpanjang[i]))
+            const totalBisaDikurangi = bisaDikurangi.reduce((a, b) => a + b, 0)
+            if (totalBisaDikurangi > 0) {
+              lebar = lebar.map((l, i) => l - kelebihan * (bisaDikurangi[i] / totalBisaDikurangi))
+            }
+          }
+          return lebar
         }
         const [lebarElemen, lebarCp, lebarMateri, lebarTp] = hitungLebarKolom()
 

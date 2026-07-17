@@ -1203,6 +1203,7 @@ export default function KaldikPage() {
     // Kolom C = daftar Lembaga/Unit; kolom D..W (20 kolom) di baris yang sama = daftar
     // Tingkat milik unit itu. "Lembaga Pusat" mewakili SELURUH tingkat di semua unit.
     const unitDenganTingkat=daftarUnitLembaga.map(u=>({
+      id:u.id,
       unit:u.label,
       tingkat:u.id==='lembaga-induk'
         ? Array.from(new Set(masterTingkatLokal.map(t=>t.nama)))
@@ -1214,21 +1215,31 @@ export default function KaldikPage() {
       u.tingkat.slice(0,20).forEach((t,j)=>{ wsData.getCell(row,4+j).value=t })
     })
 
-    // Kolom Y = daftar nama Tingkat (unik); kolom Z..BC (30 kolom) di baris yang sama =
-    // daftar Rombel milik tingkat itu.
-    const namaTingkatUnik=Array.from(new Set(masterTingkatLokal.map(t=>t.nama)))
-    const tingkatDenganRombel=namaTingkatUnik.map(namaT=>{
-      const idTingkatCocok=masterTingkatLokal.filter(t=>t.nama===namaT).map(t=>t.id)
-      return {tingkat:namaT,rombel:masterRombelLokal.filter(r=>r.tingkatId&&idTingkatCocok.includes(r.tingkatId)).map(r=>r.nama)}
-    })
-    tingkatDenganRombel.forEach((t,i)=>{
+    // Kolom Y = KUNCI GABUNGAN "Unit::Tingkat" (BUKAN cuma nama Tingkat sendirian) --
+    // supaya Tingkat dengan NAMA SAMA di Unit yang BERBEDA (pola umum banyak sekolah:
+    // tiap jenjang sama-sama punya "Kelas 1/2/3") tetap dapat daftar Rombel TERPISAH per
+    // Unit, tidak tercampur atau salah ambil punya unit lain. Kolom Z..BC (30 kolom) di
+    // baris yang sama = daftar Rombel milik pasangan Unit+Tingkat itu. Untuk "Lembaga
+    // Pusat" (mewakili SEMUA unit sekaligus), Rombel-nya memang sengaja gabungan semua
+    // Tingkat senama di semua unit.
+    const unitTingkatDenganRombel=unitDenganTingkat.flatMap(u=>u.tingkat.map(namaT=>{
+      const idTingkatCocok=(u.id==='lembaga-induk'
+        ? masterTingkatLokal.filter(t=>t.nama===namaT)
+        : masterTingkatLokal.filter(t=>t.nama===namaT&&t.lembagaId===u.id)
+      ).map(t=>t.id)
+      return {
+        kunci:`${u.unit}::${namaT}`,
+        rombel:masterRombelLokal.filter(r=>r.tingkatId&&idTingkatCocok.includes(r.tingkatId)).map(r=>r.nama),
+      }
+    }))
+    unitTingkatDenganRombel.forEach((t,i)=>{
       const row=i+2
-      wsData.getCell(row,25).value=t.tingkat
+      wsData.getCell(row,25).value=t.kunci
       t.rombel.slice(0,30).forEach((r,j)=>{ wsData.getCell(row,26+j).value=r })
     })
 
     const baurUnitAkhir=Math.max(unitDenganTingkat.length+1,2)
-    const baurTingkatAkhir=Math.max(tingkatDenganRombel.length+1,2)
+    const baurTingkatAkhir=Math.max(unitTingkatDenganRombel.length+1,2)
     const rentangKlasifikasi=`Data!$A$2:$A$${Math.max(labelKlasifikasi.length+1,2)}`
     const rentangUnit=`Data!$C$2:$C$${baurUnitAkhir}`
 
@@ -1260,12 +1271,15 @@ export default function KaldikPage() {
         showErrorMessage:true,errorStyle:'warning',errorTitle:'Nilai tidak baku',
         error:'Isi Lembaga/Unit dulu supaya daftar Tingkat muncul -- atau ketik manual dipisah koma kalau mau lebih dari satu.',
       }
-      // Rombel: opsinya BERJENJANG mengikuti Tingkat di kolom G baris ini.
+      // Rombel: opsinya BERJENJANG mengikuti Unit (F) + Tingkat (G) baris ini SEKALIGUS
+      // (bukan Tingkat saja) -- supaya Tingkat bernama sama di Unit berbeda (mis. "Kelas
+      // 1" dipakai baik oleh SMP maupun SMA) tetap menampilkan Rombel milik Unit yang
+      // benar-benar dipilih, bukan tercampur/salah ambil punya Unit lain.
       ws.getCell(`H${r}`).dataValidation={
         type:'list',allowBlank:true,
-        formulae:[`OFFSET(Data!$Y$2,MATCH($G${r},Data!$Y$2:$Y$${baurTingkatAkhir},0)-1,1,1,30)`],
+        formulae:[`OFFSET(Data!$Y$2,MATCH($F${r}&"::"&$G${r},Data!$Y$2:$Y$${baurTingkatAkhir},0)-1,1,1,30)`],
         showErrorMessage:true,errorStyle:'warning',errorTitle:'Nilai tidak baku',
-        error:'Isi Tingkat dulu supaya daftar Rombel muncul -- atau ketik manual dipisah koma kalau mau lebih dari satu.',
+        error:'Isi Lembaga/Unit dan Tingkat dulu supaya daftar Rombel muncul -- atau ketik manual dipisah koma kalau mau lebih dari satu.',
       }
     }
 
